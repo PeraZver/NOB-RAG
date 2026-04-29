@@ -3,6 +3,7 @@
 
 # Keep repo metadata and this ignore file.
 !.gitignore
+!README.md
 
 # Keep the source tree.
 !source/
