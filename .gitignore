@@ -1,0 +1,34 @@
+# Ignore everything at the repo root by default.
+*
+
+# Keep repo metadata and this ignore file.
+!.gitignore
+
+# Keep the source tree.
+!source/
+!source/**
+
+# Secrets and local environment files.
+source/.env
+*.env
+
+# Python cache and local virtualenvs.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Generated book-processing artifacts.
+campaign_work/
+campaign_verify/
+chroma_db/
+*.jsonl
+cleaning_report.json
+brigade_campaign.json
+brigade_campaign_verified.json
+
+# Editor/system noise.
+.DS_Store
+Thumbs.db
