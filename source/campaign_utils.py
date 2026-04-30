@@ -67,13 +67,23 @@ def format_batch_for_prompt(batch: ChunkBatch) -> str:
 def extract_json_object(text: str) -> dict:
     fenced_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, flags=re.DOTALL)
     if fenced_match:
-        return json.loads(fenced_match.group(1))
+        candidate = fenced_match.group(1)
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            candidate = re.sub(r",(\s*[}\]])", r"\1", candidate)
+            return json.loads(candidate)
 
     start = text.find("{")
     end = text.rfind("}")
     if start == -1 or end == -1 or end <= start:
         raise ValueError("No JSON object found in provider response.")
-    return json.loads(text[start : end + 1])
+    candidate = text[start : end + 1]
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        candidate = re.sub(r",(\s*[}\]])", r"\1", candidate)
+        return json.loads(candidate)
 
 
 def _coerce_float(value) -> float | None:
@@ -192,6 +202,10 @@ def build_final_campaign_document(
 
 def batch_filename(batch_id: int) -> str:
     return f"campaign_batch_{batch_id:04d}.json"
+
+
+def batch_raw_response_filename(batch_id: int) -> str:
+    return f"campaign_batch_{batch_id:04d}.raw.txt"
 
 
 def infer_total_batches(chunks_path: Path, batch_size: int) -> int:
