@@ -30,8 +30,8 @@ class ChunkBatch:
 def load_reference_template(template_path: Path | None) -> dict:
     if template_path is None or not template_path.exists():
         return {
-            "brigade_id": 11,
-            "brigade_name": "11th dalmatian brigade",
+            "brigade_id": None,
+            "brigade_name": "",
             "movements": [],
             "notes": "",
             "source": "",
@@ -123,6 +123,27 @@ def event_identity_key(event: dict) -> tuple[str, str, str]:
     )
 
 
+def _operation_priority(event: dict) -> int:
+    operation_text = normalize_search_text(event.get("operation", ""))
+    notes_text = normalize_search_text(event.get("notes", ""))
+    combined = f"{operation_text} {notes_text}".strip()
+
+    if "formation" in combined or "formiranje" in combined:
+        return 0
+    if "reorganisation" in combined or "reorganization" in combined or "redesignated" in combined:
+        return 1
+    return 2
+
+
+def event_sort_key(event: dict) -> tuple[str, int, str, str]:
+    return (
+        event.get("date", "").strip(),
+        _operation_priority(event),
+        event.get("place", "").strip(),
+        event.get("operation", "").strip(),
+    )
+
+
 def merge_event_records(events: list[dict]) -> list[dict]:
     merged: dict[tuple[str, str, str], dict] = {}
 
@@ -150,7 +171,7 @@ def merge_event_records(events: list[dict]) -> list[dict]:
             set(existing["source_pages"]) | set(event["source_pages"])
         )
 
-    return sorted(merged.values(), key=lambda item: (item["date"], item["place"], item["operation"]))
+    return sorted(merged.values(), key=event_sort_key)
 
 
 def load_json(path: Path) -> dict:

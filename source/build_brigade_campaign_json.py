@@ -111,6 +111,9 @@ def parse_args() -> argparse.Namespace:
 def resolve_template_path(book_dir: Path, explicit_template: Path | None) -> Path | None:
     if explicit_template is not None:
         return explicit_template.resolve()
+    source_template = Path(__file__).resolve().parent / "brigade_campaign_template.json"
+    if source_template.exists():
+        return source_template
     default_template = book_dir / "11th_dalmatian_claude-opus-4-6.json"
     return default_template if default_template.exists() else None
 
@@ -207,7 +210,7 @@ def run_extraction(args: argparse.Namespace, book_dir: Path, work_dir: Path, tem
     chunks_path = book_dir / "chunks.jsonl"
     batches = chunk_records_into_batches(chunks_path=chunks_path, batch_size=args.batch_size)
     book_title = infer_book_title(book_dir)
-    brigade_name = template.get("brigade_name", "11th dalmatian brigade")
+    brigade_name = template.get("brigade_name") or infer_book_title(book_dir)
     model = resolve_provider_model(args.provider, args.model)
     total_batches = len(batches)
     overall_start = time.perf_counter()

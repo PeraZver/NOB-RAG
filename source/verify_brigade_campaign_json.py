@@ -100,6 +100,9 @@ def parse_args() -> argparse.Namespace:
 def resolve_template_path(book_dir: Path, explicit_template: Path | None) -> Path | None:
     if explicit_template is not None:
         return explicit_template.resolve()
+    source_template = Path(__file__).resolve().parent / "brigade_campaign_template.json"
+    if source_template.exists():
+        return source_template
     default_template = book_dir / "11th_dalmatian_claude-opus-4-6.json"
     return default_template if default_template.exists() else None
 
@@ -160,7 +163,7 @@ def run_verification(
     events, _notes = collect_events_from_payloads(payloads)
     groups = build_verification_groups(events, max_group_size=args.max_group_size)
     model = resolve_provider_model(args.provider, args.model)
-    brigade_name = template.get("brigade_name", "11th dalmatian brigade")
+    brigade_name = template.get("brigade_name") or book_dir.name
 
     verify_dir.mkdir(parents=True, exist_ok=True)
 
@@ -173,6 +176,20 @@ def run_verification(
         group_path = verify_dir / verification_filename(group_id)
         if group_path.exists() and not args.overwrite:
             print(f"Skipping group {group_id}: {group_path.name} already exists")
+            continue
+
+        if len(group) == 1:
+            payload = {
+                "group_id": group_id,
+                "provider": None,
+                "model": None,
+                "input_events": group,
+                "movements": group,
+                "notes": ["Skipped provider verification because the group contains a single event."],
+                "raw_response": None,
+            }
+            group_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"Saved verification group {group_id} -> {group_path.name} (single-event passthrough)")
             continue
 
         system_prompt, user_prompt = build_verification_prompts(

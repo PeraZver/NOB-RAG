@@ -76,6 +76,10 @@ Interactive CLI entrypoint that keeps Chroma, the embedder, and the optional rer
 
 Helpers for staged campaign extraction: chunk batching, JSON parsing, event normalization, deduplication, and final document shaping.
 
+`brigade_campaign_template.json`
+
+Shared repo-level template for brigade campaign JSON outputs. All brigade extraction and verification runs can use this same baseline shape.
+
 `build_brigade_campaign_json.py`
 
 Extracts brigade campaign events from `chunks.jsonl` in resumable LLM-sized batches, saves intermediate batch JSON files, and consolidates them into a final brigade-campaign JSON document using the reference template shape.
@@ -93,6 +97,8 @@ Minimal package list for the local RAG workflow.
 `AI Processing/source/`
 
 Stores the processing scripts and lightweight documentation.
+
+Also stores the shared `brigade_campaign_template.json` used by campaign extraction and verification.
 
 `AI Processing/<book title>/`
 
