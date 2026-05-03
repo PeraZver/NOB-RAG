@@ -10,6 +10,7 @@ from campaign_utils import (
     build_verification_groups,
     collect_events_from_payloads,
     extract_json_object,
+    is_relevant_campaign_event,
     load_batch_payloads,
     load_reference_template,
     merge_event_records,
@@ -114,7 +115,8 @@ def build_verification_prompts(brigade_name: str, events: list[dict]) -> tuple[s
         "or have approximate place coordinates. "
         "Return only valid JSON. "
         "Your job is to merge duplicates intelligently, tighten dates when the evidence supports it, "
-        "normalize place naming, and provide the best approximate coordinates you can for each verified event. "
+        "normalize place naming, provide the best approximate coordinates you can for each verified event, "
+        "and aggressively remove irrelevant administrative clutter. "
         "Do not invent events beyond what the candidate records support."
     )
 
@@ -127,7 +129,23 @@ def build_verification_prompts(brigade_name: str, events: list[dict]) -> tuple[s
         "2. Tighten the date if several candidates clearly point to the same better date.\n"
         "3. Normalize place names and improve approximate coordinates.\n"
         "4. Preserve source_chunk_ids and source_pages by unioning them across merged events.\n"
-        "5. Keep only events that still look relevant to the brigade.\n\n"
+        "5. Keep only events that still look relevant to the brigade.\n"
+        "6. Exclude internal administrative or organizational items unless the event is the brigade's own formation.\n\n"
+        "Exclude examples such as:\n"
+        "- brigade staff establishment or headquarters seat\n"
+        "- meetings, consultations, planning sessions\n"
+        "- command handovers or appointments\n"
+        "- redesignations, subordination changes, or division-formation admin notes\n"
+        "- battalion/company reorganizations without combat\n\n"
+        "Keep examples such as:\n"
+        "- brigade formation\n"
+        "- combats, assaults, landings, marches, withdrawals, liberations, defenses\n\n"
+        "Formatting rules for each kept event:\n"
+        "- operation must be short, like a title, usually 2-8 words\n"
+        "- good examples: 'Assault on Brač', 'Liberation of Šibenik', 'Mostar Operation'\n"
+        "- do not put long sentence-style descriptions into operation\n"
+        "- notes must be concise, factual, and no longer than 500 characters\n"
+        "- do not include comments about how the text was parsed, inferred, estimated, or reconciled\n\n"
         "Return JSON with this exact shape:\n"
         "{\n"
         '  "movements": [\n'
@@ -152,6 +170,7 @@ def build_verification_prompts(brigade_name: str, events: list[dict]) -> tuple[s
 
 def run_verification(
     args: argparse.Namespace,
+    book_dir: Path,
     work_dir: Path,
     verify_dir: Path,
     template: dict,
@@ -161,6 +180,7 @@ def run_verification(
         raise FileNotFoundError(f"No campaign batch files found in {work_dir}")
 
     events, _notes = collect_events_from_payloads(payloads)
+    events = [event for event in events if is_relevant_campaign_event(event)]
     groups = build_verification_groups(events, max_group_size=args.max_group_size)
     model = resolve_provider_model(args.provider, args.model)
     brigade_name = template.get("brigade_name") or book_dir.name
@@ -179,12 +199,13 @@ def run_verification(
             continue
 
         if len(group) == 1:
+            movement = group[0]
             payload = {
                 "group_id": group_id,
                 "provider": None,
                 "model": None,
                 "input_events": group,
-                "movements": group,
+                "movements": [movement] if is_relevant_campaign_event(movement) else [],
                 "notes": ["Skipped provider verification because the group contains a single event."],
                 "raw_response": None,
             }
@@ -204,12 +225,15 @@ def run_verification(
             max_output_tokens=2800,
         )
         parsed = extract_json_object(response_text)
+        filtered_movements = [
+            event for event in parsed.get("movements", []) if is_relevant_campaign_event(event)
+        ]
         payload = {
             "group_id": group_id,
             "provider": args.provider,
             "model": model,
             "input_events": group,
-            "movements": parsed.get("movements", []),
+            "movements": filtered_movements,
             "notes": parsed.get("notes", []),
             "raw_response": response_text,
         }
@@ -228,14 +252,22 @@ def run_consolidation(
         raise FileNotFoundError(f"No verification files found in {verify_dir}")
 
     events, notes = collect_events_from_payloads(payloads)
+    events = [event for event in events if is_relevant_campaign_event(event)]
     merged_events = merge_event_records(events)
     metadata = load_metadata(book_dir)
     source_label = metadata.get("source_pdf", str(book_dir / "chunks.jsonl"))
+    fallback_document = {}
+    non_verified_path = book_dir / "brigade_campaign.json"
+    if non_verified_path.exists():
+        fallback_document = json.loads(non_verified_path.read_text(encoding="utf-8"))
+    elif output_path.exists():
+        fallback_document = json.loads(output_path.read_text(encoding="utf-8"))
     final_document = build_final_campaign_document(
         template=template,
         merged_events=merged_events,
         top_notes=notes,
         source_label=source_label,
+        fallback_document=fallback_document,
     )
     output_path.write_text(json.dumps(final_document, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Wrote verified campaign JSON -> {output_path}")
@@ -256,7 +288,13 @@ def main() -> None:
     template = load_reference_template(template_path)
 
     if args.mode in {"verify", "run"}:
-        run_verification(args=args, work_dir=work_dir, verify_dir=verify_dir, template=template)
+        run_verification(
+            args=args,
+            book_dir=book_dir,
+            work_dir=work_dir,
+            verify_dir=verify_dir,
+            template=template,
+        )
 
     if args.mode in {"consolidate", "run"}:
         run_consolidation(

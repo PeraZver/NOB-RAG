@@ -144,6 +144,74 @@ def event_sort_key(event: dict) -> tuple[str, int, str, str]:
     )
 
 
+def is_brigade_formation_event(event: dict) -> bool:
+    operation_text = normalize_search_text(event.get("operation", ""))
+    notes_text = normalize_search_text(event.get("notes", ""))
+    combined = f"{operation_text} {notes_text}".strip()
+    if "formation" not in combined and "formiranje" not in combined:
+        return False
+    if "division" in combined or "divizija" in combined:
+        if "redesignated" in combined or "redesignation" in combined:
+            return False
+        if "formation of 26th division" in combined or "formed the 26th division" in combined:
+            return False
+    if "brigade" in combined or "brigada" in combined:
+        return True
+    return False
+
+
+def is_relevant_campaign_event(event: dict) -> bool:
+    if is_brigade_formation_event(event):
+        return True
+
+    operation_text = normalize_search_text(event.get("operation", ""))
+    notes_text = normalize_search_text(event.get("notes", ""))
+    combined = f"{operation_text} {notes_text}".strip()
+
+    excluded_phrases = [
+        "meeting",
+        "staff established",
+        "headquarters",
+        "command handover",
+        "appointed brigade commander",
+        "replaced by",
+        "reorganisation of",
+        "reorganization of",
+        "redesignated",
+        "organisation of island defences",
+        "organization of island defences",
+        "administrative order",
+        "order of the",
+        "order issued by",
+        "directive",
+        "staff with seat",
+        "formed the 26th division",
+        "formation of 26th division",
+        "meeting of coastal command",
+        "battalion into four companies",
+    ]
+    if any(phrase in combined for phrase in excluded_phrases):
+        return False
+
+    admin_markers = [
+        "handover",
+        "appointed",
+        "seat in",
+        "staff",
+        "meeting",
+        "reorganisation",
+        "reorganization",
+        "redesignation",
+        "redesignated",
+        "directive",
+        "order",
+    ]
+    if any(marker in combined for marker in admin_markers):
+        return False
+
+    return True
+
+
 def merge_event_records(events: list[dict]) -> list[dict]:
     merged: dict[tuple[str, str, str], dict] = {}
 
@@ -210,14 +278,23 @@ def build_final_campaign_document(
     merged_events: list[dict],
     top_notes: list[str],
     source_label: str,
+    fallback_document: dict | None = None,
 ) -> dict:
     final_notes = " | ".join(note for note in top_notes if note.strip())
+    fallback_document = fallback_document or {}
+    brigade_id = template.get("brigade_id")
+    if brigade_id is None:
+        brigade_id = fallback_document.get("brigade_id")
+
+    brigade_name = template.get("brigade_name") or fallback_document.get("brigade_name", "")
+    notes_value = final_notes or template.get("notes", "") or fallback_document.get("notes", "")
+    source_value = source_label or template.get("source", "") or fallback_document.get("source", "")
     return {
-        "brigade_id": template.get("brigade_id", 11),
-        "brigade_name": template.get("brigade_name", "11th dalmatian brigade"),
+        "brigade_id": brigade_id,
+        "brigade_name": brigade_name,
         "movements": [strip_event_to_template(event) for event in merged_events],
-        "notes": final_notes or template.get("notes", ""),
-        "source": source_label or template.get("source", ""),
+        "notes": notes_value,
+        "source": source_value,
     }
 
 

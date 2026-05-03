@@ -317,11 +317,15 @@ def run_consolidation(book_dir: Path, work_dir: Path, output_path: Path, templat
     merged_events = merge_event_records(all_events)
     metadata = load_metadata(book_dir)
     source_label = metadata.get("source_pdf", str(book_dir / "chunks.jsonl"))
+    fallback_document = {}
+    if output_path.exists():
+        fallback_document = json.loads(output_path.read_text(encoding="utf-8"))
     final_document = build_final_campaign_document(
         template=template,
         merged_events=merged_events,
         top_notes=all_notes,
         source_label=source_label,
+        fallback_document=fallback_document,
     )
     output_path.write_text(
         json.dumps(final_document, ensure_ascii=False, indent=2),
