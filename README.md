@@ -4,14 +4,16 @@ This folder holds the Python tooling used to process books, build local RAG inde
 
 ## Code Layout
 
-- `AI Processing/source/rag/`
+- `source/rag/`
   Retrieval engine, provider wrappers, Chroma indexing, interactive querying, and the browser app.
-- `AI Processing/source/text_processing/`
+- `source/text_processing/`
   PDF extraction, page cleanup, chunking, and chunk validation.
-- `AI Processing/source/campaigns/`
+- `source/campaigns/`
   Brigade campaign extraction, verification, polishing, and the shared JSON template.
 
 ## Main Components
+
+### Text processing and indexing
 
 `text_processing/extract_pdf_to_jsonl.py`
 
@@ -33,6 +35,8 @@ Checks chunk sizes, continuity, and basic JSONL consistency.
 
 Builds the local ChromaDB index from `chunks.jsonl` using `BAAI/bge-m3`.
 
+### RAG execution in CLI and in browser
+
 `rag/ask_book_rag.py`
 
 One-shot CLI querying for a single indexed book.
@@ -48,6 +52,8 @@ FastAPI app that serves the browser UI and API endpoints for book selection and 
 `rag/run_rag_webapp.py`
 
 Launcher for the browser UI with `RAG_WEBAPP_HOST` and `RAG_WEBAPP_PORT` support.
+
+### Campaign JSON builder for NOB.hr project
 
 `campaigns/build_brigade_campaign_json.py`
 
@@ -67,7 +73,7 @@ Package list for the local RAG workflow and browser UI.
 
 ## Book Output Folders
 
-`AI Processing/<book title>/`
+`<project root>/<book title>/`
 
 Stores the output for one book. Right now that includes:
 
@@ -81,7 +87,7 @@ Stores the output for one book. Right now that includes:
 All commands below assume you first switch into the source root:
 
 ```powershell
-cd ".\AI Processing\source"
+cd ".\source"
 ```
 
 Run the extractor from the project root:
@@ -193,16 +199,18 @@ Then open:
 http://127.0.0.1:8000
 ```
 
-The web app will list every book folder under `AI Processing/` that contains both `chunks.jsonl` and `chroma_db/`.
+The web app will list every book folder next to `source/` that contains both `chunks.jsonl` and `chroma_db/`.
+If you want the browser app to scan a different location, set `RAG_BOOKS_ROOT` to that directory before starting it.
 
 ## Ubuntu Migration
 
-Copy the whole project folder to the Ubuntu machine so the processed book directories, `chunks.jsonl`, and `chroma_db/` come over together.
+Copy the `source/` folder and your processed book directories to the Ubuntu machine so the `chunks.jsonl` and `chroma_db/` data come over together.
+By default, the browser app expects the book folders to sit next to `source/`.
 
 Recommended setup:
 
 ```bash
-cd /path/to/NOB/AI\ Processing/source
+cd /path/to/project/source
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
@@ -228,18 +236,44 @@ OPENAI_MODEL=gpt-5.3-codex
 Start the browser UI on Ubuntu:
 
 ```bash
-cd /path/to/NOB/AI\ Processing/source
+cd /path/to/project/source
 python3 -m rag.run_rag_webapp
 ```
 
 If you want it reachable from other devices on your network, bind to all interfaces:
 
 ```bash
-cd /path/to/NOB/AI\ Processing/source
+cd /path/to/project/source
 RAG_WEBAPP_HOST=0.0.0.0 RAG_WEBAPP_PORT=8000 python3 -m rag.run_rag_webapp
 ```
 
 Then open `http://<ubuntu-ip>:8000` in the browser.
+
+Example clean layout on the new PC:
+
+```text
+project/
+  source/
+    rag/
+    text_processing/
+    campaigns/
+    requirements-rag.txt
+  Nikola Anic - Dvanaesta dalmatinska udarna brigada/
+    chunks.jsonl
+    chroma_db/
+    metadata.json
+  Rako Druzjanic -11. dalmatinska brigada/
+    chunks.jsonl
+    chroma_db/
+    metadata.json
+```
+
+Optional custom book location:
+
+```bash
+cd /path/to/project/source
+RAG_BOOKS_ROOT=/path/to/my-books python3 -m rag.run_rag_webapp
+```
 
 ## RAG Notes
 

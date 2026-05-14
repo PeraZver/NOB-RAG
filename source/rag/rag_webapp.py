@@ -22,8 +22,6 @@ from rag.rag_utils import infer_book_title, load_metadata, slugify_name
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PACKAGE_DIR.parent
-PROJECT_ROOT = SOURCE_DIR.parent.parent
-BOOKS_ROOT = PROJECT_ROOT / "AI Processing"
 STATIC_DIR = PACKAGE_DIR / "webapp_static"
 
 
@@ -53,6 +51,13 @@ def _count_chunks(chunks_path: Path) -> int | None:
         return None
 
 
+def resolve_books_root() -> Path:
+    explicit_root = os.getenv("RAG_BOOKS_ROOT", "").strip()
+    if explicit_root:
+        return Path(explicit_root).expanduser().resolve()
+    return SOURCE_DIR.parent.resolve()
+
+
 def _is_book_dir(path: Path) -> bool:
     return (
         path.is_dir()
@@ -65,10 +70,11 @@ def _is_book_dir(path: Path) -> bool:
 @lru_cache(maxsize=1)
 def discover_books() -> tuple[BookRecord, ...]:
     books: list[BookRecord] = []
-    if not BOOKS_ROOT.exists():
+    books_root = resolve_books_root()
+    if not books_root.exists():
         return tuple()
 
-    for path in sorted(BOOKS_ROOT.iterdir(), key=lambda item: item.name.lower()):
+    for path in sorted(books_root.iterdir(), key=lambda item: item.name.lower()):
         if not _is_book_dir(path):
             continue
 
