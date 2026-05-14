@@ -2,3 +2,6 @@ chromadb
 sentence-transformers
 openai
 anthropic
+python-dotenv
+fastapi
+uvicorn

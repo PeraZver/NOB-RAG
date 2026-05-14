@@ -7,7 +7,7 @@ import time
 from json import JSONDecodeError
 from pathlib import Path
 
-from campaign_utils import (
+from campaigns.campaign_utils import (
     batch_filename,
     batch_raw_response_filename,
     build_final_campaign_document,
@@ -17,9 +17,9 @@ from campaign_utils import (
     load_reference_template,
     merge_event_records,
 )
-from rag_env import load_local_env, resolve_provider_model
-from rag_providers import generate_with_provider
-from rag_utils import infer_book_title, load_metadata
+from rag.rag_env import load_local_env, resolve_provider_model
+from rag.rag_providers import generate_with_provider
+from rag.rag_utils import infer_book_title, load_metadata
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 

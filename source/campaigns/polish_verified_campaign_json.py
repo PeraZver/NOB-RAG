@@ -6,9 +6,9 @@ import re
 import sys
 from pathlib import Path
 
-from campaign_utils import extract_json_object
-from rag_env import load_local_env, resolve_provider_model
-from rag_providers import generate_with_provider
+from campaigns.campaign_utils import extract_json_object
+from rag.rag_env import load_local_env, resolve_provider_model
+from rag.rag_providers import generate_with_provider
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 

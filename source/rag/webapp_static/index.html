@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Book RAG</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="eyebrow">Local RAG</div>
+        <h1>Book Workspace</h1>
+        <p>Pick an indexed book, then chat with its contents.</p>
+      </div>
+
+      <div class="sidebar-section">
+        <label for="book-list">Books</label>
+        <div id="book-list" class="book-list" aria-live="polite"></div>
+      </div>
+
+      <div class="sidebar-section">
+        <label for="provider-select">Provider</label>
+        <select id="provider-select">
+          <option value="anthropic">Anthropic</option>
+          <option value="openai">OpenAI</option>
+        </select>
+      </div>
+
+      <div class="sidebar-section">
+        <label for="profile-select">Speed</label>
+        <select id="profile-select">
+          <option value="fast">Fast</option>
+          <option value="default">Default</option>
+          <option value="deep">Deep</option>
+        </select>
+      </div>
+
+      <div class="sidebar-section checkbox-row">
+        <label for="retrieve-only">Retrieve only</label>
+        <input id="retrieve-only" type="checkbox">
+      </div>
+    </aside>
+
+    <main class="chat-panel">
+      <header class="chat-header">
+        <div>
+          <div class="eyebrow">Browser Interface</div>
+          <h2 id="active-book-title">Choose a book</h2>
+        </div>
+        <div id="status-pill" class="status-pill">Idle</div>
+      </header>
+
+      <section id="chat-log" class="chat-log">
+        <article class="message assistant intro-card">
+          <div class="message-role">Assistant</div>
+          <div class="message-body">
+            Ask a question about the selected book. Answers stay grounded in retrieved chunks and include page-aware source summaries.
+          </div>
+        </article>
+      </section>
+
+      <form id="chat-form" class="composer">
+        <textarea
+          id="question-input"
+          rows="3"
+          placeholder="Ask about formation, commanders, campaigns, dates, places..."
+          required
+        ></textarea>
+        <div class="composer-bar">
+          <div id="composer-meta" class="composer-meta">No book selected</div>
+          <button id="send-button" type="submit">Send</button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <template id="message-template">
+    <article class="message">
+      <div class="message-role"></div>
+      <div class="message-body"></div>
+    </article>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
+

@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from rag_providers import answer_with_provider
-from rag_retrieval import RetrievalResult, RetrievalSession
+from rag.rag_providers import answer_with_provider
+from rag.rag_retrieval import RetrievalResult, RetrievalSession
 
 
 @dataclass

@@ -7,7 +7,7 @@ from pathlib import Path
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-from rag_utils import chroma_collection_name, infer_book_title, iter_jsonl, parse_source_pages
+from rag.rag_utils import chroma_collection_name, infer_book_title, iter_jsonl, parse_source_pages
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 

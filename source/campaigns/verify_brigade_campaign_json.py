@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from campaign_utils import (
+from campaigns.campaign_utils import (
     build_final_campaign_document,
     build_verification_groups,
     collect_events_from_payloads,
@@ -16,9 +16,9 @@ from campaign_utils import (
     merge_event_records,
     verification_filename,
 )
-from rag_env import load_local_env, resolve_provider_model
-from rag_providers import generate_with_provider
-from rag_utils import load_metadata
+from rag.rag_env import load_local_env, resolve_provider_model
+from rag.rag_providers import generate_with_provider
+from rag.rag_utils import load_metadata
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -117,6 +117,8 @@ def build_verification_prompts(brigade_name: str, events: list[dict]) -> tuple[s
         "Your job is to merge duplicates intelligently, tighten dates when the evidence supports it, "
         "normalize place naming, provide the best approximate coordinates you can for each verified event, "
         "and aggressively remove irrelevant administrative clutter. "
+        "You must compare each candidate carefully with the previous and next item in the list and merge consecutive entries "
+        "when they describe the same day in the same area. "
         "Do not invent events beyond what the candidate records support."
     )
 
@@ -126,20 +128,23 @@ def build_verification_prompts(brigade_name: str, events: list[dict]) -> tuple[s
         "Review these candidate events.\n"
         "Tasks:\n"
         "1. Merge duplicate or near-duplicate events that describe the same brigade action.\n"
-        "2. Tighten the date if several candidates clearly point to the same better date.\n"
-        "3. Normalize place names and improve approximate coordinates.\n"
-        "4. Preserve source_chunk_ids and source_pages by unioning them across merged events.\n"
-        "5. Keep only events that still look relevant to the brigade.\n"
-        "6. Exclude internal administrative or organizational items unless the event is the brigade's own formation.\n\n"
+        "2. Compare every item to the previous and next item; if consecutive entries happen on the same date in the same place or immediate area and describe one combat action, merge them.\n"
+        "3. Tighten the date if several candidates clearly point to the same better date.\n"
+        "4. Normalize place names and improve approximate coordinates.\n"
+        "5. Preserve source_chunk_ids and source_pages by unioning them across merged events.\n"
+        "6. Keep only events that still look relevant to the brigade.\n"
+        "7. Exclude internal administrative or organizational items unless the event is the brigade's own formation.\n\n"
         "Exclude examples such as:\n"
         "- brigade staff establishment or headquarters seat\n"
         "- meetings, consultations, planning sessions\n"
         "- command handovers or appointments\n"
         "- redesignations, subordination changes, or division-formation admin notes\n"
-        "- battalion/company reorganizations without combat\n\n"
+        "- battalion/company reorganizations without combat\n"
+        "- movement, deployment, withdrawal, relief, reserve placement, patrol activity, or redistribution of battalions/companies without a clear battle, raid, or assault\n"
+        "- hospitals, strength reports, dispositions, and logistics notes\n\n"
         "Keep examples such as:\n"
         "- brigade formation\n"
-        "- combats, assaults, landings, marches, withdrawals, liberations, defenses\n\n"
+        "- battles, raids, assaults, attacks, defensive combats, repulse of landings, and liberations\n\n"
         "Formatting rules for each kept event:\n"
         "- operation must be short, like a title, usually 2-8 words\n"
         "- good examples: 'Assault on Brač', 'Liberation of Šibenik', 'Mostar Operation'\n"

@@ -9,7 +9,7 @@ from sentence_transformers import SentenceTransformer
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from rag_utils import (
+from rag.rag_utils import (
     chroma_collection_name,
     format_page_citation,
     infer_book_title,

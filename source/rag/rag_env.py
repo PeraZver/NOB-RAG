@@ -10,6 +10,7 @@ def load_local_env(book_dir: Path | None = None) -> None:
     candidate_paths = [
         Path.cwd() / ".env",
         Path(__file__).resolve().parent / ".env",
+        Path(__file__).resolve().parent.parent / ".env",
     ]
     if book_dir is not None:
         candidate_paths.append(book_dir / ".env")

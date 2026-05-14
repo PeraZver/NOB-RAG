@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from rag_utils import iter_jsonl, normalize_search_text
+from rag.rag_utils import iter_jsonl, normalize_search_text
 
 
 @dataclass
@@ -123,6 +123,225 @@ def event_identity_key(event: dict) -> tuple[str, str, str]:
     )
 
 
+def _event_text_blob(event: dict) -> str:
+    parts = [
+        str(event.get("operation", "")),
+        str(event.get("notes", "")),
+        str(event.get("place", "")),
+        str(event.get("division", "")),
+    ]
+    return normalize_search_text(" ".join(part for part in parts if part).strip())
+
+
+def _event_tokens(text: str) -> set[str]:
+    return set(re.findall(r"\w+", normalize_search_text(text), flags=re.UNICODE))
+
+
+def _pick_better_text(current: str, candidate: str) -> str:
+    current = str(current or "").strip()
+    candidate = str(candidate or "").strip()
+    if not current:
+        return candidate
+    if not candidate:
+        return current
+    if len(candidate) > len(current):
+        return candidate
+    return current
+
+
+def _combine_notes(left: str, right: str, max_chars: int = 700) -> str:
+    snippets: list[str] = []
+    for value in (left, right):
+        text = " ".join(str(value or "").split()).strip()
+        if text and text not in snippets:
+            snippets.append(text)
+    combined = " ".join(snippets).strip()
+    if len(combined) <= max_chars:
+        return combined
+    return combined[: max_chars - 3].rstrip(" ,;:-") + "..."
+
+
+def _contains_any(text: str, phrases: list[str]) -> bool:
+    return any(phrase in text for phrase in phrases)
+
+
+def _starts_with_any(text: str, prefixes: list[str]) -> bool:
+    return any(text.startswith(prefix) for prefix in prefixes)
+
+
+def _looks_like_movement_title(text: str) -> bool:
+    patterns = [
+        r"^(?:\d+(?:st|nd|rd|th)\s+)?(?:battalion|company|platoon|patrol)\b.*\b("
+        r"transported|moved|returned|withdrawn|deployed|transferred|evacuated|embarked|marched"
+        r")\b",
+        r"^(?:units of|evacuation of|movement of|transfer of|withdrawal of|withdrawal to|return from|return to)\b",
+        r"^(?:brigade|units)\b.*\b(returned|withdrawn|evacuated|moved|transported|transferred)\b",
+    ]
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _looks_like_small_unit_movement(text: str) -> bool:
+    small_unit_terms = [
+        "battalion",
+        "bataljon",
+        "company",
+        "ceta",
+        "platoon",
+        "vod",
+        "patrol",
+        "patrola",
+    ]
+    movement_terms = [
+        "deploy",
+        "deployed",
+        "deployment",
+        "withdrawn",
+        "withdrew",
+        "transfer",
+        "transferred",
+        "return",
+        "returned",
+        "embark",
+        "embarked",
+        "disposition",
+        "reserve",
+        "concentrat",
+        "relief",
+        "redistribution",
+        "march",
+        "movement",
+        "position",
+        "holding positions",
+        "stationed",
+        "garrisoned",
+    ]
+    return _contains_any(text, small_unit_terms) and _contains_any(text, movement_terms)
+
+
+def _is_combat_event(event: dict) -> bool:
+    text = _event_text_blob(event)
+    combat_markers = [
+        "battle",
+        "combat",
+        "fighting",
+        "fight",
+        "raid",
+        "assault",
+        "attack",
+        "counterattack",
+        "landing",
+        "landed",
+        "repulse",
+        "repelled",
+        "defen",
+        "offensive",
+        "operation",
+        "liberation",
+        "capture",
+        "captured",
+        "ambush",
+        "skirmish",
+        "napad",
+        "borba",
+        "borbe",
+        "desant",
+        "iskrc",
+        "odbran",
+        "oslobod",
+        "protivnapad",
+        "prepad",
+        "juris",
+    ]
+    return _contains_any(text, combat_markers)
+
+
+def _canonical_place_tokens(place: str) -> set[str]:
+    stopwords = {
+        "island",
+        "otok",
+        "area",
+        "near",
+        "sector",
+        "coast",
+        "mainland",
+        "the",
+        "and",
+        "of",
+        "at",
+    }
+    return {
+        token
+        for token in _event_tokens(place)
+        if len(token) >= 3 and token not in stopwords and not token.isdigit()
+    }
+
+
+def places_look_same_area(left: str, right: str) -> bool:
+    left_norm = normalize_search_text(left).strip()
+    right_norm = normalize_search_text(right).strip()
+    if not left_norm or not right_norm:
+        return False
+    if left_norm == right_norm:
+        return True
+
+    left_tokens = _canonical_place_tokens(left)
+    right_tokens = _canonical_place_tokens(right)
+    if not left_tokens or not right_tokens:
+        return False
+
+    overlap = left_tokens & right_tokens
+    if overlap:
+        return True
+
+    similarity = SequenceMatcher(None, " ".join(sorted(left_tokens)), " ".join(sorted(right_tokens))).ratio()
+    return similarity >= 0.82
+
+
+def same_day_same_area(left: dict, right: dict) -> bool:
+    if left.get("date", "").strip() != right.get("date", "").strip():
+        return False
+    return places_look_same_area(left.get("place", ""), right.get("place", ""))
+
+
+def should_merge_sequential_events(left: dict, right: dict) -> bool:
+    if not same_day_same_area(left, right):
+        return False
+    if not (_is_combat_event(left) and _is_combat_event(right)):
+        return False
+
+    operation_similarity = text_similarity(left.get("operation", ""), right.get("operation", ""))
+    notes_similarity = text_similarity(left.get("notes", ""), right.get("notes", ""))
+    shared_operation_tokens = _event_tokens(left.get("operation", "")) & _event_tokens(right.get("operation", ""))
+
+    if operation_similarity >= 0.55 or notes_similarity >= 0.55:
+        return True
+    if shared_operation_tokens:
+        return True
+    if "casualt" in _event_text_blob(left) or "casualt" in _event_text_blob(right):
+        return True
+    return False
+
+
+def merge_two_events(left: dict, right: dict) -> dict:
+    merged = normalize_event(left)
+    candidate = normalize_event(right)
+
+    merged["operation"] = _pick_better_text(merged["operation"], candidate["operation"])
+    merged["notes"] = _combine_notes(merged["notes"], candidate["notes"])
+    merged["division"] = _pick_better_text(merged["division"], candidate["division"])
+
+    if merged["coordinates"]["lat"] is None and candidate["coordinates"]["lat"] is not None:
+        merged["coordinates"] = candidate["coordinates"]
+    elif candidate["coordinates"]["lat"] is not None and merged["coordinates"]["lat"] is not None:
+        if len(candidate["place"]) > len(merged["place"]):
+            merged["coordinates"] = candidate["coordinates"]
+
+    merged["place"] = _pick_better_text(merged["place"], candidate["place"])
+    merged["source_chunk_ids"] = sorted(set(merged["source_chunk_ids"]) | set(candidate["source_chunk_ids"]))
+    merged["source_pages"] = sorted(set(merged["source_pages"]) | set(candidate["source_pages"]))
+    return merged
+
+
 def _operation_priority(event: dict) -> int:
     operation_text = normalize_search_text(event.get("operation", ""))
     notes_text = normalize_search_text(event.get("notes", ""))
@@ -164,9 +383,8 @@ def is_relevant_campaign_event(event: dict) -> bool:
     if is_brigade_formation_event(event):
         return True
 
-    operation_text = normalize_search_text(event.get("operation", ""))
-    notes_text = normalize_search_text(event.get("notes", ""))
-    combined = f"{operation_text} {notes_text}".strip()
+    operation_text = normalize_search_text(str(event.get("operation", "")).strip())
+    combined = _event_text_blob(event)
 
     excluded_phrases = [
         "meeting",
@@ -189,6 +407,13 @@ def is_relevant_campaign_event(event: dict) -> bool:
         "formation of 26th division",
         "meeting of coastal command",
         "battalion into four companies",
+        "strength report",
+        "disposition report",
+        "operational hq established",
+        "dressing station",
+        "hospital",
+        "headquarters established",
+        "deputy commander",
     ]
     if any(phrase in combined for phrase in excluded_phrases):
         return False
@@ -205,8 +430,88 @@ def is_relevant_campaign_event(event: dict) -> bool:
         "redesignated",
         "directive",
         "order",
+        "hospital",
+        "strength",
+        "disposition",
+        "redistribution",
     ]
     if any(marker in combined for marker in admin_markers):
+        return False
+
+    excluded_noncombat_terms = [
+        "deployment",
+        "deployed to",
+        "transfer to mainland",
+        "transfer to the mainland",
+        "transferred to",
+        "relocation",
+        "concentration of",
+        "strength report",
+        "disposition",
+        "reserve",
+        "withdrawn from",
+        "stationed at",
+        "holding positions",
+        "evacuated",
+        "embarked",
+        "return to",
+        "march to",
+    ]
+    if _contains_any(combined, excluded_noncombat_terms) and not _is_combat_event(event):
+        return False
+
+    operation_movement_markers = [
+        "rotation of",
+        "returned to",
+        "return to",
+        "withdrawal to",
+        "withdrawn to",
+        "withdrawn from",
+        "transported by",
+        "transferred to",
+        "transfer to",
+        "deployment to",
+        "deployed to",
+        "concentration of",
+        "relocation",
+        "redistribution",
+        "holding positions",
+        "reserve",
+        "organis",
+        "organiz",
+    ]
+    if _contains_any(operation_text, operation_movement_markers) and not _is_combat_event(
+        {"operation": operation_text}
+    ):
+        return False
+
+    operation_noncombat_prefixes = [
+        "units of",
+        "returned to",
+        "return to",
+        "withdrawal to",
+        "withdrawn to",
+        "withdrawn from",
+        "rotation of",
+        "transported by",
+        "moved from",
+        "movement from",
+        "transfer to",
+        "transferred to",
+        "deployed in",
+        "deployed to",
+        "concentration of",
+    ]
+    if _starts_with_any(operation_text, operation_noncombat_prefixes):
+        return False
+
+    if _looks_like_movement_title(operation_text):
+        return False
+
+    if _looks_like_small_unit_movement(combined) and not _is_combat_event(event):
+        return False
+
+    if not _is_combat_event({"operation": operation_text, "notes": operation_text}):
         return False
 
     return True
@@ -239,7 +544,19 @@ def merge_event_records(events: list[dict]) -> list[dict]:
             set(existing["source_pages"]) | set(event["source_pages"])
         )
 
-    return sorted(merged.values(), key=event_sort_key)
+    sorted_events = sorted(merged.values(), key=event_sort_key)
+    if not sorted_events:
+        return []
+
+    sequentially_merged: list[dict] = [sorted_events[0]]
+    for event in sorted_events[1:]:
+        previous = sequentially_merged[-1]
+        if should_merge_sequential_events(previous, event):
+            sequentially_merged[-1] = merge_two_events(previous, event)
+            continue
+        sequentially_merged.append(event)
+
+    return sequentially_merged
 
 
 def load_json(path: Path) -> dict:
@@ -337,6 +654,9 @@ def text_similarity(left: str, right: str) -> float:
 
 
 def events_look_related(left: dict, right: dict) -> bool:
+    if should_merge_sequential_events(left, right):
+        return True
+
     place_similarity = text_similarity(left.get("place", ""), right.get("place", ""))
     operation_similarity = text_similarity(left.get("operation", ""), right.get("operation", ""))
     date_distance = rough_date_distance_days(left.get("date", ""), right.get("date", ""))
@@ -357,25 +677,27 @@ def build_verification_groups(events: list[dict], max_group_size: int = 6) -> li
     normalized_events.sort(key=lambda item: (item["date"], item["place"], item["operation"]))
 
     groups: list[list[dict]] = []
-    used_indices: set[int] = set()
+    current_group: list[dict] = []
 
     for index, event in enumerate(normalized_events):
-        if index in used_indices:
-            continue
+        previous_event = normalized_events[index - 1] if index > 0 else None
+        next_event = normalized_events[index + 1] if index + 1 < len(normalized_events) else None
 
-        group = [event]
-        used_indices.add(index)
+        related_to_neighbors = any(
+            neighbor is not None and events_look_related(event, neighbor)
+            for neighbor in (previous_event, next_event)
+        )
+        related_to_group = any(events_look_related(event, existing) for existing in current_group)
 
-        for other_index in range(index + 1, len(normalized_events)):
-            if other_index in used_indices:
-                continue
-            other_event = normalized_events[other_index]
-            if any(events_look_related(existing, other_event) for existing in group):
-                group.append(other_event)
-                used_indices.add(other_index)
-                if len(group) >= max_group_size:
-                    break
+        if current_group and (
+            len(current_group) >= max_group_size or (not related_to_group and not related_to_neighbors)
+        ):
+            groups.append(current_group)
+            current_group = []
 
-        groups.append(group)
+        current_group.append(event)
+
+    if current_group:
+        groups.append(current_group)
 
     return groups

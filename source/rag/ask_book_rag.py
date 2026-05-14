@@ -5,21 +5,22 @@ import os
 import sys
 from pathlib import Path
 
-from rag_env import load_local_env, resolve_provider_model
-from rag_profiles import resolve_query_profile
+from rag.rag_env import load_local_env, resolve_provider_model
+from rag.rag_profiles import resolve_query_profile
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run an interactive local RAG session that keeps models and Chroma loaded."
+        description="Ask natural-language questions against a local Chroma-backed book index."
     )
     parser.add_argument(
         "book_dir",
         type=Path,
         help="Directory containing chunks.jsonl and the persistent Chroma index.",
     )
+    parser.add_argument("question", help="Natural-language question about the book.")
     parser.add_argument(
         "--provider",
         choices=["openai", "anthropic"],
@@ -81,7 +82,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--show-sources",
         action="store_true",
-        help="Print retrieved source chunks after each answer.",
+        help="Print retrieved source chunks after the answer.",
     )
     parser.add_argument(
         "--retrieve-only",
@@ -92,7 +93,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    from rag_engine import BookRAGEngine
+    from rag.rag_engine import BookRAGEngine
 
     args = parse_args()
     book_dir = args.book_dir.resolve()
@@ -116,57 +117,32 @@ def main() -> None:
         collection_name=args.collection,
         db_dir=Path(args.db_dir).resolve() if args.db_dir else None,
     )
-    engine.preload(include_reranker=not skip_rerank)
 
-    resolved_model = None if args.retrieve_only else resolve_provider_model(args.provider, args.model)
-
-    print(f"Loaded book: {engine.title}")
     if args.retrieve_only:
-        print("Interactive retrieve-only mode. Press Ctrl+C to stop.")
-    else:
-        print(
-            f"Interactive answer mode with provider={args.provider}, model={resolved_model}. "
-            "Press Ctrl+C to stop."
+        retrieval = engine.retrieve_only(
+            question=args.question,
+            top_k=top_k,
+            candidate_k=candidate_k,
+            skip_rerank=skip_rerank,
         )
-    if profile is not None:
-        print(
-            f"Query profile: {profile.name} "
-            f"(top_k={top_k}, candidate_k={candidate_k}, skip_rerank={skip_rerank})"
-        )
+        for summary in retrieval.source_summaries:
+            print(summary)
+        return
 
-    try:
-        while True:
-            question = input("\nQuestion> ").strip()
-            if not question:
-                continue
+    result = engine.answer_question(
+        question=args.question,
+        provider=args.provider,
+        model=resolve_provider_model(args.provider, args.model),
+        top_k=top_k,
+        candidate_k=candidate_k,
+        skip_rerank=skip_rerank,
+    )
 
-            if args.retrieve_only:
-                retrieval = engine.retrieve_only(
-                    question=question,
-                    top_k=top_k,
-                    candidate_k=candidate_k,
-                    skip_rerank=skip_rerank,
-                )
-                for summary in retrieval.source_summaries:
-                    print(summary)
-                continue
-
-            result = engine.answer_question(
-                question=question,
-                provider=args.provider,
-                model=resolved_model,
-                top_k=top_k,
-                candidate_k=candidate_k,
-                skip_rerank=skip_rerank,
-            )
-            print()
-            print(result.answer.strip())
-            if args.show_sources:
-                print("\nRetrieved sources:")
-                for summary in result.retrieval.source_summaries:
-                    print(summary)
-    except (KeyboardInterrupt, EOFError):
-        print("\nStopping interactive session.")
+    print(result.answer.strip())
+    if args.show_sources:
+        print("\nRetrieved sources:")
+        for summary in result.retrieval.source_summaries:
+            print(summary)
 
 
 if __name__ == "__main__":
