@@ -6,14 +6,25 @@ import re
 from pathlib import Path
 
 
+LATIN_LETTERS = "A-Za-zČĆŽŠĐčćžšđ"
 FOOTNOTE_START_RE = re.compile(
-    r"^\s*(?:\^?\s*)?(?:\d{1,2}|I\d{1,2})[a-z]?[)\.'\"]\s+[A-ZČĆŽŠĐ]"
+    rf"^\s*(?:\^?\s*)?(?:\d{{1,2}}|I\d{{1,2}})[a-z]?[)\.'\"]\s+[{LATIN_LETTERS.upper()}]"
 )
 INLINE_FOOTNOTE_RE = re.compile(
-    r"(?P<main>.{40,}?[\.\!\?\"'])\s*(?P<footnote>(?:\d{1,2}|I\d{1,2})[a-z]?[)\.'\"]\s+[A-ZČĆŽŠĐ].*)$"
+    rf"(?P<main>.{{40,}}?[\.\!\?\"'])\s*(?P<footnote>(?:\d{{1,2}}|I\d{{1,2}})[a-z]?[)\.'\"]\s+[{LATIN_LETTERS.upper()}].*)$"
 )
 PURE_PAGE_NUMBER_RE = re.compile(r"^\s*\d+\s*$")
-UPPER_HEADING_RE = re.compile(r"^[A-ZČĆŽŠĐ0-9 .,:;()\-\"«»]+$")
+UPPER_HEADING_RE = re.compile(rf"^[{LATIN_LETTERS.upper()}0-9 .,:;()\-\"«»]+$")
+LETTER_FRAGMENT_RE = re.compile(rf"[{LATIN_LETTERS}]+")
+UPPERCASE_SPACED_WORD_RE = re.compile(
+    rf"(?<!\w)(?:[{LATIN_LETTERS.upper()}]{{1,2}}(?:\s+[{LATIN_LETTERS.upper()}]{{1,2}}){{2,}})(?!\w)"
+)
+UPPERCASE_LEAD_FRAGMENT_RE = re.compile(
+    rf"(?<!\w)[{LATIN_LETTERS.upper()}]\s+[{LATIN_LETTERS.upper()}]{{2,4}}(?:\s+[{LATIN_LETTERS.upper()}]{{2,4}})?(?!\w)"
+)
+LOWERCASE_SPACED_WORD_RE = re.compile(
+    rf"(?<!\w)(?:[{LATIN_LETTERS.upper()}{LATIN_LETTERS.lower()}1]\s+){{3,}}[{LATIN_LETTERS.lower()}]{{1,2}}(?!\w)"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -86,6 +97,26 @@ def split_main_and_footnotes(lines: list[str]) -> tuple[list[str], list[str]]:
     return main_lines, footnote_lines
 
 
+def collapse_spaced_words(text: str) -> str:
+    def replacer(match: re.Match[str]) -> str:
+        candidate = match.group(0)
+        fragments = re.findall(rf"[{LATIN_LETTERS}1]+", candidate)
+        if any(len(fragment) == 1 and fragment == "1" for fragment in fragments):
+            has_lowercase_context = any(
+                any(character.islower() for character in fragment) for fragment in fragments
+            )
+            normalized_fragments = [
+                ("l" if fragment == "1" and has_lowercase_context else fragment)
+                for fragment in fragments
+            ]
+            return "".join(normalized_fragments)
+        return "".join(LETTER_FRAGMENT_RE.findall(candidate))
+
+    collapsed = UPPERCASE_SPACED_WORD_RE.sub(replacer, text)
+    collapsed = UPPERCASE_LEAD_FRAGMENT_RE.sub(replacer, collapsed)
+    return LOWERCASE_SPACED_WORD_RE.sub(replacer, collapsed)
+
+
 def clean_paragraph_lines(lines: list[str]) -> tuple[str, int, int]:
     cleaned_parts: list[str] = []
     current = ""
@@ -104,7 +135,7 @@ def clean_paragraph_lines(lines: list[str]) -> tuple[str, int, int]:
             if current:
                 cleaned_parts.append(current.strip())
                 current = ""
-            cleaned_parts.append(line)
+            cleaned_parts.append(collapse_spaced_words(line))
             continue
 
         if not current:
@@ -125,6 +156,7 @@ def clean_paragraph_lines(lines: list[str]) -> tuple[str, int, int]:
 
     cleaned_text = "\n\n".join(part for part in cleaned_parts if part)
     cleaned_text = re.sub(r"[ \t]+", " ", cleaned_text)
+    cleaned_text = collapse_spaced_words(cleaned_text)
     cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text).strip()
     return cleaned_text, dehyphenations, merged_lines
 
@@ -158,7 +190,9 @@ def clean_pages_jsonl(
                 "word_count": count_words(cleaned_text),
             }
             if footnote_lines:
-                cleaned_record["footnotes"] = "\n".join(line.strip() for line in footnote_lines if line.strip())
+                cleaned_record["footnotes"] = "\n".join(
+                    line.strip() for line in footnote_lines if line.strip()
+                )
 
             json.dump(cleaned_record, output_file, ensure_ascii=False)
             output_file.write("\n")
