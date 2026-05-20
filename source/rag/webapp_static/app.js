@@ -1,6 +1,7 @@
 const state = {
   books: [],
   activeBookSlug: null,
+  sharedIndexAvailable: false,
   pending: false,
 };
 
@@ -27,6 +28,18 @@ function getActiveBook() {
 
 function renderBooks() {
   bookList.innerHTML = "";
+  if (state.sharedIndexAvailable) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `book-button${state.activeBookSlug === "__all__" ? " active" : ""}`;
+    button.innerHTML = `
+      <div class="book-title">All books</div>
+      <div class="book-meta">Shared library query</div>
+    `;
+    button.addEventListener("click", () => selectBook("__all__"));
+    bookList.appendChild(button);
+  }
+
   for (const book of state.books) {
     const button = document.createElement("button");
     button.type = "button";
@@ -43,8 +56,11 @@ function renderBooks() {
 function selectBook(bookSlug) {
   state.activeBookSlug = bookSlug;
   const book = getActiveBook();
-  activeBookTitle.textContent = book ? book.title : "Choose a book";
-  composerMeta.textContent = book ? `Ready to query ${book.title}` : "No book selected";
+  const isAllBooks = bookSlug === "__all__";
+  activeBookTitle.textContent = isAllBooks ? "All indexed books" : (book ? book.title : "Choose a book");
+  composerMeta.textContent = isAllBooks
+    ? "Ready to query the shared library"
+    : (book ? `Ready to query ${book.title}` : "No book selected");
   renderBooks();
 }
 
@@ -203,9 +219,14 @@ async function loadBooks() {
   }
 
   state.books = payload.books || [];
+  state.sharedIndexAvailable = Boolean(payload.shared_index_available);
   renderBooks();
-  if (state.books.length > 0) {
-    selectBook(state.books[0].slug);
+  if (state.sharedIndexAvailable) {
+    selectBook("__all__");
+    setStatus("Ready");
+  } else if (state.books.length > 0) {
+    const indexedBook = state.books.find((book) => book.has_book_index);
+    selectBook((indexedBook || state.books[0]).slug);
     setStatus("Ready");
   } else {
     activeBookTitle.textContent = "No indexed books found";
@@ -218,8 +239,10 @@ chatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const question = questionInput.value.trim();
   const book = getActiveBook();
+  const activeBookSlug = state.activeBookSlug;
+  const isAllBooks = activeBookSlug === "__all__";
 
-  if (!book || !question || state.pending) {
+  if ((!book && !isAllBooks) || !question || state.pending) {
     return;
   }
 
@@ -232,7 +255,7 @@ chatForm.addEventListener("submit", async (event) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        book_slug: book.slug,
+        book_slug: activeBookSlug,
         question,
         provider: providerSelect.value,
         profile: profileSelect.value,
@@ -248,8 +271,8 @@ chatForm.addEventListener("submit", async (event) => {
     const metaLine = payload.provider
       ? `${payload.book.title} | ${payload.provider} | ${payload.model} | ${payload.timing_ms} ms`
       : `${payload.book.title} | ${payload.mode} | ${payload.timing_ms} ms`;
-    const chunkLine = Array.isArray(payload.chunk_ids) && payload.chunk_ids.length > 0
-      ? `chunk_ids: ${payload.chunk_ids.join(", ")}`
+    const chunkLine = Array.isArray(payload.chunk_refs) && payload.chunk_refs.length > 0
+      ? `chunks: ${payload.chunk_refs.join(", ")}`
       : "";
     const messageBody = chunkLine
       ? `${payload.answer}\n\n${metaLine}\n${chunkLine}`

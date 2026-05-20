@@ -35,6 +35,10 @@ Checks chunk sizes, continuity, and basic JSONL consistency.
 
 Builds the local ChromaDB index from `chunks.jsonl` using `BAAI/bge-m3`.
 
+`rag/build_shared_chroma_index.py`
+
+Builds one shared ChromaDB library across all discovered book folders with globally unique multi-book chunk IDs and book-aware metadata.
+
 ### RAG execution in CLI and in browser
 
 `rag/ask_book_rag.py`
@@ -47,7 +51,7 @@ Long-lived interactive CLI that keeps retrieval models loaded between questions.
 
 `rag/rag_webapp.py`
 
-FastAPI app that serves the browser UI and API endpoints for book selection and chat.
+FastAPI app that serves the browser UI and API endpoints for book selection and chat. When a shared index exists, the browser can query either one selected book or all indexed books at once.
 
 `rag/run_rag_webapp.py`
 
@@ -199,8 +203,32 @@ Then open:
 http://127.0.0.1:8000
 ```
 
-The web app will list every book folder next to `source/` that contains both `chunks.jsonl` and `chroma_db/`.
+The web app will list every book folder next to `source/` that contains `chunks.jsonl`.
+If the shared index exists, the browser also enables an `All books` mode backed by the shared collection.
 If you want the browser app to scan a different location, set `RAG_BOOKS_ROOT` to that directory before starting it.
+
+Build or rebuild the shared library index across all books:
+
+```powershell
+python -m rag.build_shared_chroma_index --reset
+```
+
+Append only newly added books to the shared library:
+
+```powershell
+python -m rag.build_shared_chroma_index
+```
+
+Recommended workflow for a new book:
+
+```powershell
+python -m text_processing.extract_pdf_to_jsonl "..\..\SFRJ literatura\New Book.pdf" --output-root ..
+python -m text_processing.clean_pages_jsonl "..\New Book\pages.jsonl"
+python -m text_processing.chunk_pages_jsonl "..\New Book\cleaned_pages.jsonl"
+python -m text_processing.validate_chunks_jsonl "..\New Book\chunks.jsonl"
+python -m rag.build_chroma_index "..\New Book" --reset
+python -m rag.build_shared_chroma_index
+```
 
 ## Ubuntu Migration
 
@@ -255,9 +283,9 @@ Example clean layout on the new PC:
 project/
   source/
     rag/
-    text_processing/
-    campaigns/
-    requirements-rag.txt
+      text_processing/
+      campaigns/
+      requirements-rag.txt
   Nikola Anic - Dvanaesta dalmatinska udarna brigada/
     chunks.jsonl
     chroma_db/
@@ -266,6 +294,7 @@ project/
     chunks.jsonl
     chroma_db/
     metadata.json
+  shared_chroma_db/
 ```
 
 Optional custom book location:

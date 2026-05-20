@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from time import perf_counter
@@ -17,21 +16,18 @@ from pydantic import BaseModel, Field
 from rag.rag_engine import BookRAGEngine
 from rag.rag_env import load_local_env, resolve_provider_model
 from rag.rag_profiles import resolve_query_profile
-from rag.rag_utils import infer_book_title, load_metadata, slugify_name
+from rag.rag_utils import (
+    IndexedBook,
+    discover_books,
+    resolve_books_root,
+    shared_collection_name,
+    shared_db_dir,
+)
 
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PACKAGE_DIR.parent
 STATIC_DIR = PACKAGE_DIR / "webapp_static"
-
-
-@dataclass(frozen=True)
-class BookRecord:
-    slug: str
-    title: str
-    path: Path
-    chunk_count: int | None
-    source_pdf: str | None
 
 
 class ChatRequest(BaseModel):
@@ -43,70 +39,53 @@ class ChatRequest(BaseModel):
     model: str | None = None
 
 
-def _count_chunks(chunks_path: Path) -> int | None:
+def available_books() -> tuple[IndexedBook, ...]:
+    return discover_books(resolve_books_root(SOURCE_DIR))
+
+
+def shared_index_available() -> bool:
+    books_root = resolve_books_root(SOURCE_DIR)
+    db_dir = shared_db_dir(books_root)
+    if not db_dir.exists():
+        return False
     try:
-        with chunks_path.open("r", encoding="utf-8") as handle:
-            return sum(1 for line in handle if line.strip())
-    except OSError:
-        return None
+        import chromadb
+
+        client = chromadb.PersistentClient(path=str(db_dir))
+        client.get_collection(shared_collection_name())
+        return True
+    except Exception:
+        return False
 
 
-def resolve_books_root() -> Path:
-    explicit_root = os.getenv("RAG_BOOKS_ROOT", "").strip()
-    if explicit_root:
-        return Path(explicit_root).expanduser().resolve()
-    return SOURCE_DIR.parent.resolve()
-
-
-def _is_book_dir(path: Path) -> bool:
-    return (
-        path.is_dir()
-        and path.name != "source"
-        and (path / "chunks.jsonl").exists()
-        and (path / "chroma_db").is_dir()
-    )
-
-
-@lru_cache(maxsize=1)
-def discover_books() -> tuple[BookRecord, ...]:
-    books: list[BookRecord] = []
-    books_root = resolve_books_root()
-    if not books_root.exists():
-        return tuple()
-
-    for path in sorted(books_root.iterdir(), key=lambda item: item.name.lower()):
-        if not _is_book_dir(path):
-            continue
-
-        metadata = load_metadata(path)
-        title = infer_book_title(path)
-        source_pdf = metadata.get("source_pdf")
-        books.append(
-            BookRecord(
-                slug=slugify_name(title),
-                title=title,
-                path=path.resolve(),
-                chunk_count=_count_chunks(path / "chunks.jsonl"),
-                source_pdf=str(source_pdf) if source_pdf else None,
-            )
-        )
-    return tuple(books)
-
-
-def get_book_by_slug(book_slug: str) -> BookRecord:
-    for book in discover_books():
+def get_book_by_slug(book_slug: str) -> IndexedBook:
+    for book in available_books():
         if book.slug == book_slug:
             return book
     raise HTTPException(status_code=404, detail=f"Unknown book: {book_slug}")
 
 
 @lru_cache(maxsize=8)
-def get_engine(book_dir: str, embedding_model: str, reranker_model: str) -> BookRAGEngine:
-    book_path = Path(book_dir)
+def get_engine(
+    book_dir: str | None,
+    embedding_model: str,
+    reranker_model: str,
+    db_dir: str | None = None,
+    collection_name: str | None = None,
+    books_root: str | None = None,
+    query_book_slug: str | None = None,
+    title: str | None = None,
+) -> BookRAGEngine:
+    book_path = Path(book_dir) if book_dir else None
     return BookRAGEngine(
         book_dir=book_path,
         embedding_model=embedding_model,
         reranker_model=reranker_model,
+        db_dir=Path(db_dir) if db_dir else None,
+        collection_name=collection_name,
+        books_root=Path(books_root) if books_root else None,
+        query_book_slug=query_book_slug,
+        title=title,
     )
 
 
@@ -152,14 +131,20 @@ def create_app() -> FastAPI:
                 "title": book.title,
                 "chunk_count": book.chunk_count,
                 "source_pdf": book.source_pdf,
+                "has_book_index": (book.path / "chroma_db").is_dir(),
             }
-            for book in discover_books()
+            for book in available_books()
         ]
-        return {"books": books}
+        return {
+            "books": books,
+            "shared_index_available": shared_index_available(),
+            "books_root": str(resolve_books_root(SOURCE_DIR)),
+        }
 
     @app.post("/api/chat")
     async def chat(request: ChatRequest) -> dict[str, object]:
-        book = get_book_by_slug(request.book_slug)
+        using_shared = shared_index_available()
+        book = None if request.book_slug == "__all__" else get_book_by_slug(request.book_slug)
         provider = request.provider.lower().strip()
         if provider not in {"openai", "anthropic"}:
             raise HTTPException(status_code=400, detail="provider must be 'openai' or 'anthropic'")
@@ -179,14 +164,44 @@ def create_app() -> FastAPI:
             candidate_k = profile.candidate_k
             skip_rerank = profile.skip_rerank
 
-        engine = get_engine(
-            book_dir=str(book.path),
-            embedding_model="BAAI/bge-m3",
-            reranker_model="BAAI/bge-reranker-v2-m3",
-        )
+        if request.book_slug == "__all__" and not using_shared:
+            raise HTTPException(
+                status_code=400,
+                detail="The shared index is not available yet. Build it with python -m rag.build_shared_chroma_index --reset.",
+            )
+        if not using_shared and book is not None and not (book.path / "chroma_db").is_dir():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"The selected book does not have a per-book Chroma index yet: {book.title}. "
+                    "Run python -m rag.build_chroma_index \"..\\<Book Folder>\" --reset or build the shared library index."
+                ),
+            )
+
+        books_root = resolve_books_root(SOURCE_DIR)
+        if using_shared:
+            selected_title = "All indexed books" if book is None else book.title
+            engine = get_engine(
+                book_dir=None,
+                embedding_model="BAAI/bge-m3",
+                reranker_model="BAAI/bge-reranker-v2-m3",
+                db_dir=str(shared_db_dir(books_root)),
+                collection_name=shared_collection_name(),
+                books_root=str(books_root),
+                query_book_slug=None if book is None else book.slug,
+                title=selected_title,
+            )
+        else:
+            assert book is not None
+            engine = get_engine(
+                book_dir=str(book.path),
+                embedding_model="BAAI/bge-m3",
+                reranker_model="BAAI/bge-reranker-v2-m3",
+                title=book.title,
+            )
 
         def run_query() -> dict[str, object]:
-            load_local_env(book.path)
+            load_local_env(book.path if book is not None else None)
             started = perf_counter()
 
             if request.retrieve_only:
@@ -198,9 +213,16 @@ def create_app() -> FastAPI:
                 )
                 duration_ms = round((perf_counter() - started) * 1000, 1)
                 return {
-                    "book": {"slug": book.slug, "title": retrieval.title},
+                    "book": {"slug": request.book_slug, "title": retrieval.title},
                     "answer": "Retrieved sources only.",
-                    "chunk_ids": [candidate["chunk_id"] for candidate in retrieval.candidates],
+                    "chunk_refs": [
+                        (
+                            f"{candidate['metadata'].get('book_slug')}:{candidate['chunk_id']}"
+                            if request.book_slug == "__all__"
+                            else str(candidate["chunk_id"])
+                        )
+                        for candidate in retrieval.candidates
+                    ],
                     "timing_ms": duration_ms,
                     "mode": "retrieve-only",
                     "provider": None,
@@ -218,9 +240,16 @@ def create_app() -> FastAPI:
             )
             duration_ms = round((perf_counter() - started) * 1000, 1)
             return {
-                "book": {"slug": book.slug, "title": result.retrieval.title},
+                "book": {"slug": request.book_slug, "title": result.retrieval.title},
                 "answer": result.answer.strip(),
-                "chunk_ids": [candidate["chunk_id"] for candidate in result.retrieval.candidates],
+                "chunk_refs": [
+                    (
+                        f"{candidate['metadata'].get('book_slug')}:{candidate['chunk_id']}"
+                        if request.book_slug == "__all__"
+                        else str(candidate["chunk_id"])
+                    )
+                    for candidate in result.retrieval.candidates
+                ],
                 "timing_ms": duration_ms,
                 "mode": "answer",
                 "provider": provider,

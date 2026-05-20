@@ -10,7 +10,10 @@ import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from rag.rag_utils import (
+    IndexedBook,
+    build_chunk_doc_id,
     chroma_collection_name,
+    discover_books,
     format_page_citation,
     infer_book_title,
     infer_chunk_features,
@@ -18,6 +21,7 @@ from rag.rag_utils import (
     normalize_search_text,
     parse_source_pages,
     preview_text,
+    slugify_name,
     tokenize_search_text,
 )
 
@@ -28,6 +32,18 @@ class RetrievalResult:
     context: str
     source_summaries: list[str]
     candidates: list[dict]
+
+
+def candidate_key(candidate: dict) -> str:
+    metadata = candidate.get("metadata", {})
+    doc_id = metadata.get("doc_id")
+    if isinstance(doc_id, str) and doc_id.strip():
+        return doc_id
+    book_slug = str(metadata.get("book_slug", "")).strip()
+    chunk_id = int(metadata.get("chunk_id", candidate.get("chunk_id", 0)))
+    if book_slug:
+        return build_chunk_doc_id(book_slug, chunk_id)
+    return f"chunk-{chunk_id}"
 
 
 def build_context(candidates: list[dict]) -> tuple[str, list[str]]:
@@ -41,19 +57,23 @@ def build_context(candidates: list[dict]) -> tuple[str, list[str]]:
         source_pages = parse_source_pages(metadata.get("source_pages", ""))
         citation = format_page_citation(source_pages)
         chunk_id = metadata["chunk_id"]
-        blocks.append(
-            "\n".join(
-                [
-                    f"Source {rank}",
-                    f"chunk_id: {chunk_id}",
-                    f"pages: {citation}",
-                    f"distance: {distance:.4f}",
-                    document,
-                ]
-            )
+        book_title = str(metadata.get("book_title", "")).strip()
+        header_lines = [f"Source {rank}"]
+        if book_title:
+            header_lines.append(f"book: {book_title}")
+        header_lines.extend(
+            [
+                f"chunk_id: {chunk_id}",
+                f"pages: {citation}",
+                f"distance: {distance:.4f}",
+                document,
+            ]
         )
+        blocks.append("\n".join(header_lines))
+
+        prefix = f"{book_title} :: " if book_title else ""
         source_summaries.append(
-            f"[{rank}] chunk_id={chunk_id} {citation} :: {preview_text(document)}"
+            f"[{rank}] {prefix}chunk_id={chunk_id} {citation} :: {preview_text(document)}"
         )
 
     return "\n\n".join(blocks), source_summaries
@@ -237,7 +257,7 @@ def classify_query_intent(question: str) -> dict[str, bool]:
         "command": bool(tokens & commander_terms),
         "structure": bool(tokens & structure_terms),
         "campaign": bool(tokens & campaign_terms),
-        "brach_topic": "brac" in normalized or "braÄu" in question.lower() or "braÄ" in question.lower(),
+        "brach_topic": "brac" in normalized or "braÃ„Âu" in question.lower() or "braÃ„Â" in question.lower(),
     }
 
 
@@ -331,24 +351,27 @@ def metadata_boost(question: str, metadata: dict[str, object], text: str) -> flo
     return boost
 
 
-def get_semantic_candidates(collection, query_embedding: list[float], limit: int) -> dict[int, dict]:
+def get_semantic_candidates(collection, query_embedding: list[float], limit: int, where: dict | None = None) -> dict[str, dict]:
     result = collection.query(
         query_embeddings=[query_embedding],
         n_results=limit,
         include=["documents", "metadatas", "distances"],
+        where=where,
     )
 
     documents = result["documents"][0]
     metadatas = result["metadatas"][0]
     distances = result["distances"][0]
-    candidates: dict[int, dict] = {}
+    candidates: dict[str, dict] = {}
 
     for rank, (document, metadata, distance) in enumerate(
         zip(documents, metadatas, distances),
         start=1,
     ):
+        key = candidate_key({"metadata": metadata})
         chunk_id = int(metadata["chunk_id"])
-        candidates[chunk_id] = {
+        candidates[key] = {
+            "doc_id": key,
             "chunk_id": chunk_id,
             "text": document,
             "metadata": metadata,
@@ -358,36 +381,50 @@ def get_semantic_candidates(collection, query_embedding: list[float], limit: int
     return candidates
 
 
-def get_lexical_candidates(chunks_path: Path, question: str, limit: int) -> dict[int, dict]:
+def get_lexical_candidates(
+    books: tuple[IndexedBook, ...],
+    question: str,
+    limit: int,
+    use_book_slug_ids: bool,
+) -> dict[str, dict]:
     scored: list[dict] = []
-    for record in iter_jsonl(chunks_path):
-        score = lexical_score(question, record.get("text", ""))
-        if score <= 0:
-            continue
-        scored.append(
-            {
-                "chunk_id": int(record["chunk_id"]),
-                "text": record["text"],
-                "metadata": {
-                    "chunk_id": int(record["chunk_id"]),
-                    "word_count": int(record["word_count"]),
-                    "source_pages": ",".join(str(page) for page in record.get("source_pages", [])),
-                },
-                "lexical_score": score,
-            }
-        )
+    for book in books:
+        for record in iter_jsonl(book.chunks_path):
+            score = lexical_score(question, record.get("text", ""))
+            if score <= 0:
+                continue
+            chunk_id = int(record["chunk_id"])
+            doc_id = build_chunk_doc_id(book.slug, chunk_id) if use_book_slug_ids else f"chunk-{chunk_id}"
+            scored.append(
+                {
+                    "doc_id": doc_id,
+                    "chunk_id": chunk_id,
+                    "text": record["text"],
+                    "metadata": {
+                        "doc_id": doc_id,
+                        "book_title": book.title,
+                        "book_slug": book.slug,
+                        "book_dir": str(book.path),
+                        "source_pdf": book.source_pdf or "",
+                        "chunk_id": chunk_id,
+                        "word_count": int(record["word_count"]),
+                        "source_pages": ",".join(str(page) for page in record.get("source_pages", [])),
+                    },
+                    "lexical_score": score,
+                }
+            )
 
     scored.sort(key=lambda item: item["lexical_score"], reverse=True)
-    return {item["chunk_id"]: item for item in scored[:limit]}
+    return {item["doc_id"]: item for item in scored[:limit]}
 
 
 def merge_candidates(
     question: str,
-    semantic_candidates: dict[int, dict],
-    lexical_candidates: dict[int, dict],
+    semantic_candidates: dict[str, dict],
+    lexical_candidates: dict[str, dict],
     candidate_k: int,
 ) -> list[dict]:
-    merged: dict[int, dict] = {}
+    merged: dict[str, dict] = {}
 
     max_semantic_rank = max(
         (candidate["semantic_rank"] for candidate in semantic_candidates.values()),
@@ -398,21 +435,21 @@ def merge_candidates(
         default=1.0,
     )
 
-    for chunk_id, candidate in semantic_candidates.items():
+    for key, candidate in semantic_candidates.items():
         semantic_score = 1.0 - ((candidate["semantic_rank"] - 1) / max(1, max_semantic_rank - 1))
-        merged[chunk_id] = {
+        merged[key] = {
             **candidate,
             "semantic_score": semantic_score,
             "lexical_score": 0.0,
             "metadata_boost": metadata_boost(question, candidate["metadata"], candidate["text"]),
         }
 
-    for chunk_id, candidate in lexical_candidates.items():
+    for key, candidate in lexical_candidates.items():
         lexical_component = candidate["lexical_score"] / max_lexical_score
-        if chunk_id in merged:
-            merged[chunk_id]["lexical_score"] = lexical_component
+        if key in merged:
+            merged[key]["lexical_score"] = lexical_component
         else:
-            merged[chunk_id] = {
+            merged[key] = {
                 **candidate,
                 "distance": 1.0,
                 "semantic_rank": max_semantic_rank + 1,
@@ -468,19 +505,51 @@ def rerank_candidates(
 class RetrievalSession:
     def __init__(
         self,
-        book_dir: Path,
+        book_dir: Path | None,
         embedding_model: str,
         reranker_model: str,
         collection_name: str | None = None,
         db_dir: Path | None = None,
+        books_root: Path | None = None,
+        query_book_slug: str | None = None,
+        title: str | None = None,
     ) -> None:
-        self.book_dir = book_dir.resolve()
+        self.book_dir = book_dir.resolve() if book_dir is not None else None
         self.embedding_model = embedding_model
         self.reranker_model = reranker_model
-        self.title = infer_book_title(self.book_dir)
-        self.collection_name = collection_name or chroma_collection_name(self.title)
-        self.db_dir = (db_dir or (self.book_dir / "chroma_db")).resolve()
-        self.chunks_path = self.book_dir / "chunks.jsonl"
+        self.books_root = books_root.resolve() if books_root is not None else None
+        self.query_book_slug = query_book_slug
+        self.using_shared_index = self.books_root is not None
+
+        if self.using_shared_index:
+            assert self.books_root is not None
+            all_books = discover_books(self.books_root)
+            if self.query_book_slug:
+                self.query_books = tuple(book for book in all_books if book.slug == self.query_book_slug)
+                if not self.query_books:
+                    raise FileNotFoundError(f"book slug not found under {self.books_root}: {self.query_book_slug}")
+            else:
+                self.query_books = all_books
+            self.title = title or (self.query_books[0].title if len(self.query_books) == 1 else "All indexed books")
+            self.collection_name = collection_name or "shared-book-library"
+            self.db_dir = db_dir.resolve() if db_dir is not None else (self.books_root / "shared_chroma_db").resolve()
+        else:
+            if self.book_dir is None:
+                raise ValueError("book_dir is required when not using the shared index.")
+            self.title = title or infer_book_title(self.book_dir)
+            self.collection_name = collection_name or chroma_collection_name(self.title)
+            self.db_dir = (db_dir or (self.book_dir / "chroma_db")).resolve()
+            self.query_books = (
+                IndexedBook(
+                    slug=slugify_name(self.title),
+                    title=self.title,
+                    path=self.book_dir,
+                    chunks_path=(self.book_dir / "chunks.jsonl").resolve(),
+                    metadata={},
+                    source_pdf=None,
+                    chunk_count=None,
+                ),
+            )
 
         self.client = chromadb.PersistentClient(path=str(self.db_dir))
         self.collection = self.client.get_collection(self.collection_name)
@@ -492,16 +561,19 @@ class RetrievalSession:
 
     def retrieve(self, question: str, top_k: int, candidate_k: int, skip_rerank: bool) -> RetrievalResult:
         query_embedding = self.embedder.encode(question).tolist()
+        semantic_filter = {"book_slug": self.query_book_slug} if self.query_book_slug else None
 
         semantic_candidates = get_semantic_candidates(
             collection=self.collection,
             query_embedding=query_embedding,
             limit=max(candidate_k * 2, 24),
+            where=semantic_filter,
         )
         lexical_candidates = get_lexical_candidates(
-            chunks_path=self.chunks_path,
+            books=self.query_books,
             question=question,
             limit=max(candidate_k * 2, 24),
+            use_book_slug_ids=self.using_shared_index,
         )
         merged_candidates = merge_candidates(
             question=question,

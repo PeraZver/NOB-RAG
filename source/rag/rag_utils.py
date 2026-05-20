@@ -3,8 +3,24 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
+
+
+@dataclass(frozen=True)
+class IndexedBook:
+    slug: str
+    title: str
+    path: Path
+    chunks_path: Path
+    metadata: dict
+    source_pdf: str | None
+    chunk_count: int | None
+
+
+SHARED_COLLECTION_NAME = "shared-book-library"
+SHARED_DB_DIRNAME = "shared_chroma_db"
 
 
 def iter_jsonl(path: Path) -> Iterator[dict]:
@@ -14,6 +30,14 @@ def iter_jsonl(path: Path) -> Iterator[dict]:
             if not line:
                 continue
             yield json.loads(line)
+
+
+def count_jsonl_records(path: Path) -> int | None:
+    try:
+        with path.open("r", encoding="utf-8") as input_file:
+            return sum(1 for line in input_file if line.strip())
+    except OSError:
+        return None
 
 
 def get_page_number(record: dict) -> int:
@@ -57,6 +81,51 @@ def slugify_name(value: str) -> str:
     if len(ascii_text) < 3:
         ascii_text = f"{ascii_text}-rag"
     return ascii_text[:63]
+
+
+def resolve_books_root(source_dir: Path | None = None) -> Path:
+    if source_dir is None:
+        source_dir = Path(__file__).resolve().parent.parent
+    return source_dir.parent.resolve()
+
+
+def shared_db_dir(books_root: Path) -> Path:
+    return books_root / SHARED_DB_DIRNAME
+
+
+def shared_collection_name() -> str:
+    return SHARED_COLLECTION_NAME
+
+
+def build_chunk_doc_id(book_slug: str, chunk_id: int) -> str:
+    return f"{book_slug}-chunk-{int(chunk_id)}"
+
+
+def discover_books(books_root: Path) -> tuple[IndexedBook, ...]:
+    books: list[IndexedBook] = []
+    if not books_root.exists():
+        return tuple()
+
+    for path in sorted(books_root.iterdir(), key=lambda item: item.name.lower()):
+        if not path.is_dir() or path.name == "source":
+            continue
+        chunks_path = path / "chunks.jsonl"
+        if not chunks_path.exists():
+            continue
+        metadata = load_metadata(path)
+        title = infer_book_title(path)
+        books.append(
+            IndexedBook(
+                slug=slugify_name(title),
+                title=title,
+                path=path.resolve(),
+                chunks_path=chunks_path.resolve(),
+                metadata=metadata,
+                source_pdf=str(metadata.get("source_pdf")) if metadata.get("source_pdf") else None,
+                chunk_count=count_jsonl_records(chunks_path),
+            )
+        )
+    return tuple(books)
 
 
 def chroma_collection_name(book_title: str) -> str:

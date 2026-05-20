@@ -7,7 +7,14 @@ from pathlib import Path
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-from rag.rag_utils import chroma_collection_name, infer_book_title, iter_jsonl, parse_source_pages
+from rag.rag_utils import (
+    build_chunk_doc_id,
+    chroma_collection_name,
+    infer_book_title,
+    iter_jsonl,
+    parse_source_pages,
+    slugify_name,
+)
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -50,19 +57,23 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def flush_batch(collection, embedder, batch: list[dict]) -> int:
+def flush_batch(collection, embedder, batch: list[dict], book_title: str, book_slug: str, book_dir: Path) -> int:
     if not batch:
         return 0
 
     documents = [item["text"] for item in batch]
     embeddings = embedder.encode(documents, batch_size=len(documents)).tolist()
-    ids = [f"chunk-{item['chunk_id']}" for item in batch]
+    ids = [build_chunk_doc_id(book_slug, int(item["chunk_id"])) for item in batch]
     metadatas = []
 
     for item in batch:
         source_pages = parse_source_pages(item.get("source_pages", []))
         metadatas.append(
             {
+                "doc_id": build_chunk_doc_id(book_slug, int(item["chunk_id"])),
+                "book_title": book_title,
+                "book_slug": book_slug,
+                "book_dir": str(book_dir),
                 "chunk_id": int(item["chunk_id"]),
                 "word_count": int(item["word_count"]),
                 "source_pages": ",".join(str(page) for page in source_pages),
@@ -117,6 +128,7 @@ def build_index(
         raise FileNotFoundError(f"chunks.jsonl not found: {chunks_path}")
 
     title = infer_book_title(book_dir)
+    book_slug = slugify_name(title)
     collection_name = collection_name or chroma_collection_name(title)
     db_dir = db_dir or (book_dir / "chroma_db")
     db_dir.mkdir(parents=True, exist_ok=True)
@@ -140,16 +152,16 @@ def build_index(
     batch: list[dict] = []
 
     for record in iter_jsonl(chunks_path):
-        chunk_id = f"chunk-{record['chunk_id']}"
+        chunk_id = build_chunk_doc_id(book_slug, int(record["chunk_id"]))
         if chunk_id in existing_ids:
             skipped += 1
             continue
         batch.append(record)
         if len(batch) >= batch_size:
-            indexed += flush_batch(collection, embedder, batch)
+            indexed += flush_batch(collection, embedder, batch, title, book_slug, book_dir)
             batch = []
 
-    indexed += flush_batch(collection, embedder, batch)
+    indexed += flush_batch(collection, embedder, batch, title, book_slug, book_dir)
     return collection_name, db_dir, indexed, skipped
 
 

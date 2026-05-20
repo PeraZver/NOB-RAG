@@ -16,11 +16,14 @@ class AnswerResult:
 class BookRAGEngine:
     def __init__(
         self,
-        book_dir: Path,
+        book_dir: Path | None,
         embedding_model: str,
         reranker_model: str,
         collection_name: str | None = None,
         db_dir: Path | None = None,
+        books_root: Path | None = None,
+        query_book_slug: str | None = None,
+        title: str | None = None,
     ) -> None:
         self.retrieval = RetrievalSession(
             book_dir=book_dir,
@@ -28,6 +31,9 @@ class BookRAGEngine:
             reranker_model=reranker_model,
             collection_name=collection_name,
             db_dir=db_dir,
+            books_root=books_root,
+            query_book_slug=query_book_slug,
+            title=title,
         )
 
     @property
