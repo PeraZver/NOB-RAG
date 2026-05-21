@@ -258,7 +258,7 @@ or:
 ```dotenv
 OPENAI_API_KEY=...
 RAG_PROVIDER=openai
-OPENAI_MODEL=gpt-5.3-codex
+OPENAI_MODEL=gpt-4.1
 ```
 
 Start the browser UI on Ubuntu:

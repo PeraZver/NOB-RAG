@@ -29,4 +29,5 @@ def resolve_provider_model(provider: str, explicit_model: str | None = None) -> 
         return explicit_model
     if provider == "anthropic":
         return os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
-    return os.getenv("OPENAI_MODEL", "gpt-5.3-codex")
+    # Default to a general-purpose text model for grounded book Q&A.
+    return os.getenv("OPENAI_MODEL", "gpt-4.1")
