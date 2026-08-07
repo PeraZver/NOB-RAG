@@ -122,6 +122,7 @@ def build_extraction_prompts(book_title: str, brigade_name: str, batch_text: str
     system_prompt = (
         "You extract structured campaign events from a wartime brigade monograph. "
         "Return only valid JSON. "
+        "Write place, operation, and notes in English. "
         "Focus on this brigade's formation, movements, assaults, evacuations, liberations, "
         "defensive combats, and other brigade actions. "
         "If an event is a whole-division operation and no specific brigades are named, you may include it "
@@ -154,8 +155,11 @@ def build_extraction_prompts(book_title: str, brigade_name: str, batch_text: str
         "1. Only include events tied to the target brigade or clear whole-division actions that include it.\n"
         "2. Keep one record per dated action or movement.\n"
         "3. If the text gives a date range, pick the best single date and explain briefly in notes.\n"
-        "4. If the place is a route or larger area, use the best central approximate coordinates.\n"
-        "5. Always include source_chunk_ids and source_pages from the evidence.\n\n"
+        "4. place must contain only one or more geographic determinants (town, village, mountain, sector, route) where the event happened, without action narrative text.\n"
+        "5. operation must be a short operation-style label (2-8 words), such as 'Operation Mostar', 'Operation Rosselsprung', or 'Liberation of Split'. If the exact historical operation name is unclear, use a generic title like 'Attack on X', 'Defense of X', or 'Liberation of X'.\n"
+        "6. notes must be a short factual summary in English, including involved units, casualties, and key achievements (for example bridge destruction or town liberation) when those details are present in the source.\n"
+        "7. If the place is a route or larger area, use the best central approximate coordinates.\n"
+        "8. Always include source_chunk_ids and source_pages from the evidence.\n\n"
         "Chunks:\n"
         f"{batch_text}"
     )

@@ -1,0 +1,453 @@
+[
+  {
+    "operation_name": "April War",
+    "start_date": "1941-04-06",
+    "end_date": "1941-04-18",
+    "regions_affected": [
+      "Belgrade",
+      "Serbia",
+      "Montenegro",
+      "Kingdom of Yugoslavia"
+    ]
+  },
+  {
+    "operation_name": "Operation Trio",
+    "start_date": "1942-04-20",
+    "end_date": "1942-05-13",
+    "regions_affected": [
+      "eastern Bosnia",
+      "Sarajevo",
+      "Olovo",
+      "Tuzla",
+      "Rogatica",
+      "Foča",
+      "Kalinovik",
+      "Drina valley"
+    ]
+  },
+  {
+    "operation_name": "1st Battle of Livno",
+    "start_date": "1942-08-04",
+    "end_date": "1942-08-07",
+    "regions_affected": [
+      "Livno",
+      "Tomislavgrad",
+      "Šujica",
+      "Kupres",
+      "Livanjsko polje",
+      "western Bosnia"
+    ]
+  },
+  {
+    "operation_name": "Operation Albia",
+    "start_date": "1942-08-12",
+    "end_date": "1942-09-02",
+    "regions_affected": [
+      "Biokovo",
+      "Baška Voda",
+      "Zagvozd",
+      "Vrgorac",
+      "Metković",
+      "Ploče",
+      "Lovreč",
+      "Aržano",
+      "Studenci",
+      "Posušje"
+    ]
+  },
+  {
+    "operation_name": "Operation Jajce I",
+    "start_date": "1942-09-30",
+    "end_date": "1942-10-21",
+    "regions_affected": [
+      "Jajce",
+      "Donji Vakuf",
+      "Turbe",
+      "Ključ",
+      "Sitnica",
+      "Mrkonjić-Grad",
+      "Sanski Most",
+      "Bosanska Krajina"
+    ]
+  },
+  {
+    "operation_name": "Operation Alfa",
+    "start_date": "1942-10-03",
+    "end_date": "1942-10-15",
+    "regions_affected": [
+      "Prozor",
+      "Konjic",
+      "Šćit",
+      "Gornji Vakuf",
+      "Donji Vakuf",
+      "Bugojno",
+      "Travnik",
+      "Mostar area",
+      "northern Herzegovina"
+    ]
+  },
+  {
+    "operation_name": "Operation Beta",
+    "start_date": "1942-10-21",
+    "end_date": "1942-10-29",
+    "regions_affected": [
+      "Livno",
+      "Kupres",
+      "Suica",
+      "Duvno",
+      "Imotski",
+      "Sinj",
+      "Vrlika",
+      "Bosansko Grahovo",
+      "western Bosnia"
+    ]
+  },
+  {
+    "operation_name": "Operation Jajce II",
+    "start_date": "1942-10-22",
+    "end_date": "1942-11-06",
+    "regions_affected": [
+      "Jajce",
+      "Donji Vakuf",
+      "Šipovo",
+      "Mrkonjić-Grad",
+      "Janja valley",
+      "Pliva valley",
+      "Mliništa",
+      "Vitorog"
+    ]
+  },
+  {
+    "operation_name": "Operation Jajce III",
+    "start_date": "1942-12-01",
+    "end_date": "1942-12-06",
+    "regions_affected": [
+      "Jajce",
+      "Vrbas valley",
+      "Donji Vakuf",
+      "Turbe",
+      "Lašva valley",
+      "Kotor-Varoš",
+      "central Bosnia"
+    ]
+  },
+  {
+    "operation_name": "2nd Battle of Livno",
+    "start_date": "1942-12-04",
+    "end_date": "1942-12-16",
+    "regions_affected": [
+      "Livno",
+      "Tomislavgrad",
+      "Kupres",
+      "Šujica",
+      "Livanjsko polje",
+      "western Bosnia"
+    ]
+  },
+  {
+    "operation_name": "Operation Weiss",
+    "start_date": "1943-01-20",
+    "end_date": "1943-03-31",
+    "regions_affected": [
+      "Lika",
+      "Kordun",
+      "Banija",
+      "western Bosnia",
+      "Neretva valley"
+    ]
+  },
+  {
+    "operation_name": "Operation Schwarz",
+    "start_date": "1943-05-15",
+    "end_date": "1943-06-16",
+    "regions_affected": [
+      "Sutjeska",
+      "Tara canyon",
+      "Piva canyon",
+      "Durmitor",
+      "eastern Bosnia",
+      "Herzegovina",
+      "Montenegro"
+    ]
+  },
+  {
+    "operation_name": "Operation Gamma",
+    "start_date": "1943-08-17",
+    "end_date": "1943-09-19",
+    "regions_affected": [
+      "eastern Herzegovina",
+      "Bileća",
+      "Gacko",
+      "Nevesinje",
+      "Ulog"
+    ]
+  },
+  {
+    "operation_name": "Operation Achse",
+    "start_date": "1943-09-09",
+    "end_date": "1943-10-31",
+    "regions_affected": [
+      "Balkans",
+      "Yugoslavia",
+      "Adriatic coast"
+    ]
+  },
+  {
+    "operation_name": "Battle for Split (1943)",
+    "start_date": "1943-09-09",
+    "end_date": "1943-10-02",
+    "regions_affected": [
+      "Split",
+      "Klis",
+      "Sinj",
+      "Trogir",
+      "Omiš",
+      "Mosor",
+      "Cetina valley",
+      "central Dalmatia"
+    ]
+  },
+  {
+    "operation_name": "Operation Herbstgewitter",
+    "start_date": "1943-10-23",
+    "end_date": "1943-12-27",
+    "regions_affected": [
+      "Pelješac",
+      "Korčula",
+      "Mljet",
+      "Hvar",
+      "Brač",
+      "Šolta",
+      "southern Dalmatia",
+      "central Dalmatia",
+      "Split-Dubrovnik coast",
+      "Adriatic islands"
+    ]
+  },
+  {
+    "operation_name": "Operation Kugelblitz",
+    "start_date": "1943-12-03",
+    "end_date": "1943-12-15",
+    "regions_affected": [
+      "eastern Bosnia",
+      "Tuzla",
+      "Drinjača",
+      "Prijepolje"
+    ]
+  },
+  {
+    "operation_name": "Operation Ziethen",
+    "start_date": "1943-12-04",
+    "end_date": "1943-12-06",
+    "regions_affected": [
+      "Livno",
+      "Duvno",
+      "Jajce",
+      "Bugojno",
+      "Livno-Duvno sector",
+      "western Bosnia"
+    ]
+  },
+  {
+    "operation_name": "Operation Panther",
+    "start_date": "1943-12-07",
+    "end_date": "1943-12-20",
+    "regions_affected": [
+      "Kordun",
+      "Banija",
+      "Petrova gora",
+      "Glina",
+      "Petrinja",
+      "Sisak",
+      "Sunja",
+      "Kostajnica",
+      "Bihać corridor",
+      "Cazin Krajina"
+    ]
+  },
+  {
+    "operation_name": "Operation Schneesturm",
+    "start_date": "1943-12-21",
+    "end_date": "1943-12-29",
+    "regions_affected": [
+      "eastern Bosnia",
+      "Krivaja valley",
+      "Vareš",
+      "Olovo",
+      "Han Pijesak",
+      "Kladanj",
+      "Vlasenica",
+      "Šekovići",
+      "Spreča valley",
+      "Tuzla-Doboj line"
+    ]
+  },
+  {
+    "operation_name": "Operation Morgenwind",
+    "start_date": "1944-01-06",
+    "end_date": "1944-01-15",
+    "regions_affected": [
+      "Brač",
+      "Šolta",
+      "Pučišća",
+      "Povlja",
+      "central Dalmatia",
+      "Omiš",
+      "Baška Voda",
+      "Makarska"
+    ]
+  },
+  {
+    "operation_name": "Drvar Airborne Raid",
+    "start_date": "1944-05-25",
+    "end_date": "1944-06-06",
+    "regions_affected": [
+      "Drvar",
+      "Trubar",
+      "Srb",
+      "Bosanska Krupa",
+      "Jajce",
+      "Mrkonjić-Grad",
+      "Glamoč",
+      "Kupreško polje",
+      "western Bosnia"
+    ]
+  },
+  {
+    "operation_name": "Battle for Serbia",
+    "start_date": "1944-09-27",
+    "end_date": "1944-12-15",
+    "regions_affected": [
+      "eastern Serbian border",
+      "Lapovo",
+      "Aranđelovac",
+      "Belgrade",
+      "southern Serbia",
+      "Srem",
+      "Šid"
+    ]
+  },
+  {
+    "operation_name": "Liberation of Dalmatia",
+    "start_date": "1944-09-12",
+    "end_date": "1944-12-03",
+    "regions_affected": [
+      "Dalmatia",
+      "Brac",
+      "Livno",
+      "Dubrovnik",
+      "Split",
+      "Sinj",
+      "Knin",
+      "Gračac"
+    ]
+  },
+  {
+    "operation_name": "Knin Operation",
+    "start_date": "1944-11-25",
+    "end_date": "1944-12-05",
+    "regions_affected": [
+      "Knin",
+      "Drniš",
+      "Gračac",
+      "Bosansko Grahovo",
+      "Pađene",
+      "Zrmanja valley",
+      "northern Dalmatia",
+      "Lika approaches"
+    ]
+  },
+  {
+    "operation_name": "Syrmian Front",
+    "start_date": "1944-12-01",
+    "end_date": "1945-04-12",
+    "regions_affected": [
+      "Srem",
+      "west of Šid",
+      "Sava",
+      "southwestern Hungary"
+    ]
+  },
+  {
+    "operation_name": "Mostar Operation",
+    "start_date": "1945-02-06",
+    "end_date": "1945-02-17",
+    "regions_affected": [
+      "Mostar",
+      "Široki Brijeg",
+      "Ljubuški",
+      "Nevesinje",
+      "Buna",
+      "Blagaj",
+      "Neretva valley",
+      "Herzegovina"
+    ]
+  },
+  {
+    "operation_name": "Sarajevo Operation",
+    "start_date": "1945-03-28",
+    "end_date": "1945-04-06",
+    "regions_affected": [
+      "Sarajevo",
+      "Bosna valley",
+      "Ilidža",
+      "Rajlovac",
+      "Vogošća",
+      "Koševo",
+      "Pale",
+      "Trebević",
+      "Romanija",
+      "Ivan Sedlo"
+    ]
+  },
+  {
+    "operation_name": "Karlovac Operation",
+    "start_date": "1945-04-30",
+    "end_date": "1945-05-07",
+    "regions_affected": [
+      "Karlovac",
+      "Duga Resa",
+      "Novigrad na Dobri",
+      "Netretić",
+      "Ozalj",
+      "Brođani",
+      "Ladvenjak",
+      "Kupa",
+      "Korana",
+      "Mrežnica",
+      "Dobra"
+    ]
+  },
+  {
+    "operation_name": "Rijeka Operation",
+    "start_date": "1945-04-16",
+    "end_date": "1945-05-06",
+    "regions_affected": [
+      "Rijeka",
+      "Sušak",
+      "Rječina",
+      "Klana",
+      "Opatija",
+      "Volosko",
+      "Kvarner",
+      "Istria"
+    ]
+  },
+  {
+    "operation_name": "Trieste Operation",
+    "start_date": "1945-04-30",
+    "end_date": "1945-05-03",
+    "regions_affected": [
+      "Trieste",
+      "Opicina",
+      "Basovizza",
+      "Muggia",
+      "Monfalcone",
+      "Gorizia",
+      "Postojna",
+      "Ilirska Bistrica",
+      "Pivka",
+      "Slovene Littoral"
+    ]
+  }
+]

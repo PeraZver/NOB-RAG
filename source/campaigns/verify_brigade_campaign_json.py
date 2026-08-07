@@ -114,6 +114,7 @@ def build_verification_prompts(brigade_name: str, events: list[dict]) -> tuple[s
         "You receive candidate event records that may overlap, duplicate each other, have fuzzy dates, "
         "or have approximate place coordinates. "
         "Return only valid JSON. "
+        "Write place, operation, and notes in English. "
         "Your job is to merge duplicates intelligently, tighten dates when the evidence supports it, "
         "normalize place naming, provide the best approximate coordinates you can for each verified event, "
         "and aggressively remove irrelevant administrative clutter. "
@@ -146,10 +147,15 @@ def build_verification_prompts(brigade_name: str, events: list[dict]) -> tuple[s
         "- brigade formation\n"
         "- battles, raids, assaults, attacks, defensive combats, repulse of landings, and liberations\n\n"
         "Formatting rules for each kept event:\n"
+        "- place must contain only one or more geographic determinants (town, village, mountain, sector, route) where the event happened\n"
+        "- do not include action narrative text in place\n"
         "- operation must be short, like a title, usually 2-8 words\n"
-        "- good examples: 'Assault on Brač', 'Liberation of Šibenik', 'Mostar Operation'\n"
+        "- use operation-style labels such as 'Operation Mostar', 'Operation Rosselsprung', 'Liberation of Split'\n"
+        "- if exact historical operation naming is unclear, use a generic title like 'Attack on X', 'Defense of X', or 'Liberation of X'\n"
         "- do not put long sentence-style descriptions into operation\n"
         "- notes must be concise, factual, and no longer than 500 characters\n"
+        "- notes should summarize the event and include involved units, casualties, and important achievements (for example bridge destruction or town liberation) when present in evidence\n"
+        "- do not omit casualty or outcome details when explicitly stated\n"
         "- do not include comments about how the text was parsed, inferred, estimated, or reconciled\n\n"
         "Return JSON with this exact shape:\n"
         "{\n"
@@ -201,21 +207,6 @@ def run_verification(
         group_path = verify_dir / verification_filename(group_id)
         if group_path.exists() and not args.overwrite:
             print(f"Skipping group {group_id}: {group_path.name} already exists")
-            continue
-
-        if len(group) == 1:
-            movement = group[0]
-            payload = {
-                "group_id": group_id,
-                "provider": None,
-                "model": None,
-                "input_events": group,
-                "movements": [movement] if is_relevant_campaign_event(movement) else [],
-                "notes": ["Skipped provider verification because the group contains a single event."],
-                "raw_response": None,
-            }
-            group_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-            print(f"Saved verification group {group_id} -> {group_path.name} (single-event passthrough)")
             continue
 
         system_prompt, user_prompt = build_verification_prompts(

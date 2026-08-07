@@ -71,6 +71,10 @@ Runs a second verification pass that merges duplicates, tightens dates, and impr
 
 Polishes already-verified events by shortening operation titles and tightening notes.
 
+`campaigns/group_verified_campaign_json.py`
+
+Groups verified events into broader multi-event operations for clearer map display.
+
 `requirements-rag.txt`
 
 Package list for the local RAG workflow and browser UI.
@@ -189,6 +193,12 @@ Then consolidate the verified groups:
 
 ```powershell
 python -m campaigns.verify_brigade_campaign_json consolidate "..\Rako Druzjanic -11. dalmatinska brigada"
+```
+
+Group verified events into broader map-display operations:
+
+```powershell
+python -m campaigns.group_verified_campaign_json "..\Rako Druzjanic -11. dalmatinska brigada"
 ```
 
 Launch the browser-based interface:
