@@ -22,7 +22,14 @@ def count_words(text: str) -> int:
     return len(text.split()) if text else 0
 
 
-def extract_pdf_to_jsonl(pdf_path: Path, output_root: Path) -> tuple[Path, Path]:
+def extract_pdf_to_jsonl(
+    pdf_path: Path,
+    output_root: Path,
+    max_pages: int | None = None,
+) -> tuple[Path, Path]:
+    if max_pages is not None and max_pages <= 0:
+        raise ValueError("max_pages must be greater than 0")
+
     book_title = pdf_path.stem
     book_dir = output_root / slugify_filename(book_title)
     book_dir.mkdir(parents=True, exist_ok=True)
@@ -33,9 +40,10 @@ def extract_pdf_to_jsonl(pdf_path: Path, output_root: Path) -> tuple[Path, Path]
     with pdfplumber.open(pdf_path) as pdf, jsonl_path.open(
         "w", encoding="utf-8"
     ) as jsonl_file:
-        page_count = len(pdf.pages)
+        source_page_count = len(pdf.pages)
+        page_count = min(source_page_count, max_pages) if max_pages else source_page_count
 
-        for page_number, page in enumerate(pdf.pages, start=1):
+        for page_number, page in enumerate(pdf.pages[:page_count], start=1):
             text = page.extract_text() or ""
             record = {
                 "page_number": page_number,
@@ -49,8 +57,11 @@ def extract_pdf_to_jsonl(pdf_path: Path, output_root: Path) -> tuple[Path, Path]
         "source_pdf": str(pdf_path.resolve()),
         "book_title": book_title,
         "page_count": page_count,
+        "source_page_count": source_page_count,
         "output_jsonl": str(jsonl_path.resolve()),
     }
+    if max_pages is not None:
+        metadata["page_limit"] = max_pages
     metadata_path.write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -69,6 +80,12 @@ def parse_args() -> argparse.Namespace:
         default=Path("./AI Processing"),
         help="Root folder for extracted output.",
     )
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=None,
+        help="Optional maximum number of PDF pages to process.",
+    )
     return parser.parse_args()
 
 
@@ -79,7 +96,11 @@ def main() -> None:
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
 
-    jsonl_path, metadata_path = extract_pdf_to_jsonl(pdf_path, args.output_root)
+    jsonl_path, metadata_path = extract_pdf_to_jsonl(
+        pdf_path,
+        args.output_root,
+        max_pages=args.max_pages,
+    )
     print(f"Wrote JSONL to: {jsonl_path}")
     print(f"Wrote metadata to: {metadata_path}")
 
