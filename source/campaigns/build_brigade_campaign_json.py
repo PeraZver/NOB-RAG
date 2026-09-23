@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 import time
+from datetime import date
 from json import JSONDecodeError
 from pathlib import Path
 
@@ -105,6 +106,12 @@ def parse_args() -> argparse.Namespace:
         default=2,
         help="How many repair attempts to make if the provider returns malformed JSON.",
     )
+    parser.add_argument(
+        "--min-event-date",
+        type=date.fromisoformat,
+        default=None,
+        help="Optional inclusive ISO date; exclude events before this date.",
+    )
     return parser.parse_args()
 
 
@@ -118,7 +125,19 @@ def resolve_template_path(book_dir: Path, explicit_template: Path | None) -> Pat
     return default_template if default_template.exists() else None
 
 
-def build_extraction_prompts(book_title: str, brigade_name: str, batch_text: str) -> tuple[str, str]:
+def build_extraction_prompts(
+    book_title: str,
+    brigade_name: str,
+    batch_text: str,
+    min_event_date: date | None = None,
+) -> tuple[str, str]:
+    date_rule = ""
+    if min_event_date is not None:
+        date_rule = (
+            f" The brigade's qualifying campaign begins on {min_event_date.isoformat()}. "
+            "Exclude every event before that date, including predecessor units, detachments, "
+            "operational zones, and actions before the brigade's formation."
+        )
     system_prompt = (
         "You extract structured campaign events from a wartime brigade monograph. "
         "Return only valid JSON. "
@@ -129,8 +148,15 @@ def build_extraction_prompts(book_title: str, brigade_name: str, batch_text: str
         "as participation by the brigade when the source clearly treats it as a division-wide action. "
         "Exclude pure orders, planning directives, commendations, honorary titles, meetings, and unrelated units. "
         "Use the best date the source supports. Use ISO dates YYYY-MM-DD when possible. "
-        "Find approximate GPS coordinates for the named place or central coordinates for a larger area. "
-        "Be conservative and grounded in the text."
+        "Find approximate GPS coordinates for the exact named place or the center of the named sector. "
+        "Do not reuse coordinates from a nearby town, do not use a brigade headquarters coordinate for a battle elsewhere, "
+        "and do not invent extra decimal precision. Be conservative and grounded in the text."
+        + date_rule
+    )
+    minimum_date_rule = (
+        f"9. Do not include any event before {min_event_date.isoformat()}.\n\n"
+        if min_event_date
+        else ""
     )
     user_prompt = (
         f"Book title: {book_title}\n"
@@ -160,7 +186,8 @@ def build_extraction_prompts(book_title: str, brigade_name: str, batch_text: str
         "6. notes must be a short factual summary in English, including involved units, casualties, and key achievements (for example bridge destruction or town liberation) when those details are present in the source.\n"
         "7. If the place is a route or larger area, use the best central approximate coordinates.\n"
         "8. Always include source_chunk_ids and source_pages from the evidence.\n\n"
-        "Chunks:\n"
+        + minimum_date_rule
+        + "Chunks:\n"
         f"{batch_text}"
     )
     return system_prompt, user_prompt
@@ -210,6 +237,23 @@ def parse_with_repair(
     raise last_error
 
 
+def filter_events_by_min_date(events: list[dict], min_event_date: date | None) -> list[dict]:
+    if min_event_date is None:
+        return events
+
+    filtered: list[dict] = []
+    for event in events:
+        raw_date = str(event.get("date", "")).strip()
+        try:
+            event_date = date.fromisoformat(raw_date)
+        except ValueError:
+            filtered.append(event)
+            continue
+        if event_date >= min_event_date:
+            filtered.append(event)
+    return filtered
+
+
 def run_extraction(args: argparse.Namespace, book_dir: Path, work_dir: Path, template: dict) -> None:
     chunks_path = book_dir / "chunks.jsonl"
     batches = chunk_records_into_batches(chunks_path=chunks_path, batch_size=args.batch_size)
@@ -251,6 +295,7 @@ def run_extraction(args: argparse.Namespace, book_dir: Path, work_dir: Path, tem
             book_title=book_title,
             brigade_name=brigade_name,
             batch_text=format_batch_for_prompt(batch),
+            min_event_date=args.min_event_date,
         )
         response_text = generate_with_provider(
             provider=args.provider,
@@ -277,13 +322,14 @@ def run_extraction(args: argparse.Namespace, book_dir: Path, work_dir: Path, tem
             print("  Tip: retry this batch with a smaller --batch-size, such as 4 or even 2.")
             raise error
 
+        movements = filter_events_by_min_date(parsed.get("movements", []), args.min_event_date)
         payload = {
             "batch_id": batch.batch_id,
             "chunk_ids": batch.chunk_ids,
             "source_pages": batch.source_pages,
             "provider": args.provider,
             "model": model,
-            "movements": parsed.get("movements", []),
+            "movements": movements,
             "notes": parsed.get("notes", []),
             "raw_response": final_response_text,
             "repair_attempts": repair_attempts,
@@ -304,7 +350,13 @@ def run_extraction(args: argparse.Namespace, book_dir: Path, work_dir: Path, tem
     print(f"Extraction pass finished in {format_seconds(total_elapsed)}")
 
 
-def run_consolidation(book_dir: Path, work_dir: Path, output_path: Path, template: dict) -> None:
+def run_consolidation(
+    book_dir: Path,
+    work_dir: Path,
+    output_path: Path,
+    template: dict,
+    min_event_date: date | None,
+) -> None:
     start_time = time.perf_counter()
     batch_files = sorted(work_dir.glob("campaign_batch_*.json"))
     if not batch_files:
@@ -318,7 +370,9 @@ def run_consolidation(book_dir: Path, work_dir: Path, output_path: Path, templat
         all_events.extend(payload.get("movements", []))
         all_notes.extend(str(note) for note in payload.get("notes", []))
 
-    merged_events = merge_event_records(all_events)
+    merged_events = merge_event_records(
+        filter_events_by_min_date(all_events, min_event_date)
+    )
     metadata = load_metadata(book_dir)
     source_label = metadata.get("source_pdf", str(book_dir / "chunks.jsonl"))
     fallback_document = {}
@@ -362,6 +416,7 @@ def main() -> None:
             work_dir=work_dir,
             output_path=output_path,
             template=template,
+            min_event_date=args.min_event_date,
         )
 
 
