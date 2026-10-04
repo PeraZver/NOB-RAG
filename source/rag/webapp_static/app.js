@@ -45,7 +45,8 @@ function renderBooks() {
     button.type = "button";
     button.className = `book-button${book.slug === state.activeBookSlug ? " active" : ""}`;
     button.innerHTML = `
-      <div class="book-title">${book.title}</div>
+      <div class="book-author">${escapeHtml(book.author || "")}</div>
+      <div class="book-title">${escapeHtml(book.display_title || book.title)}</div>
       <div class="book-meta">${book.chunk_count ?? "?"} chunks</div>
     `;
     button.addEventListener("click", () => selectBook(book.slug));
@@ -57,11 +58,26 @@ function selectBook(bookSlug) {
   state.activeBookSlug = bookSlug;
   const book = getActiveBook();
   const isAllBooks = bookSlug === "__all__";
-  activeBookTitle.textContent = isAllBooks ? "All indexed books" : (book ? book.title : "Choose a book");
+  activeBookTitle.textContent = isAllBooks ? "All indexed books" : (book ? bookLabel(book) : "Choose a book");
   composerMeta.textContent = isAllBooks
     ? "Ready to query the shared library"
-    : (book ? `Ready to query ${book.title}` : "No book selected");
+    : (book ? `Ready to query ${bookLabel(book)}` : "No book selected");
   renderBooks();
+}
+
+function bookLabel(book) {
+  return book.display_title || book.title;
+}
+
+// Order by the first unit number in the title; unnumbered books go last, then alphabetical.
+function sortBooks(books) {
+  const unitNumber = (book) => {
+    const match = bookLabel(book).match(/\d+/);
+    return match ? Number(match[0]) : Infinity;
+  };
+  return [...books].sort((a, b) =>
+    (unitNumber(a) - unitNumber(b) || 0) ||
+    bookLabel(a).localeCompare(bookLabel(b), "sr-Latn"));
 }
 
 function escapeHtml(value) {
@@ -218,7 +234,7 @@ async function loadBooks() {
     throw new Error(payload.detail || "Failed to load books.");
   }
 
-  state.books = payload.books || [];
+  state.books = sortBooks(payload.books || []);
   state.sharedIndexAvailable = Boolean(payload.shared_index_available);
   renderBooks();
   if (state.sharedIndexAvailable) {
@@ -268,9 +284,11 @@ chatForm.addEventListener("submit", async (event) => {
       throw new Error(payload.detail || "Request failed.");
     }
 
+    const answeredBook = state.books.find((item) => item.slug === payload.book.slug);
+    const answeredTitle = answeredBook ? bookLabel(answeredBook) : payload.book.title;
     const metaLine = payload.provider
-      ? `${payload.book.title} | ${payload.provider} | ${payload.model} | ${payload.timing_ms} ms`
-      : `${payload.book.title} | ${payload.mode} | ${payload.timing_ms} ms`;
+      ? `${answeredTitle} | ${payload.provider} | ${payload.model} | ${payload.timing_ms} ms`
+      : `${answeredTitle} | ${payload.mode} | ${payload.timing_ms} ms`;
     const chunkLine = Array.isArray(payload.chunk_refs) && payload.chunk_refs.length > 0
       ? `chunks: ${payload.chunk_refs.join(", ")}`
       : "";

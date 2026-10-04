@@ -39,6 +39,16 @@ class ChatRequest(BaseModel):
     model: str | None = None
 
 
+def display_parts(book: IndexedBook) -> dict[str, str]:
+    # Prefer curated metadata; fall back to splitting "Author - Title".
+    author = str(book.metadata.get("author") or "").strip()
+    title = str(book.metadata.get("display_title") or "").strip()
+    if not title:
+        head, sep, tail = book.title.partition(" - ")
+        author, title = (head.strip(), tail.strip()) if sep else ("", book.title)
+    return {"author": author, "display_title": title}
+
+
 def available_books() -> tuple[IndexedBook, ...]:
     return discover_books(resolve_books_root(SOURCE_DIR))
 
@@ -136,6 +146,7 @@ def create_app() -> FastAPI:
             {
                 "slug": book.slug,
                 "title": book.title,
+                **display_parts(book),
                 "chunk_count": book.chunk_count,
                 "source_pdf": book.source_pdf,
                 "has_book_index": (book.path / "chroma_db").is_dir(),
