@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Book RAG</title>
+  <title>NOB RAG Library</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="eyebrow">Local RAG</div>
-        <h1>Book Workspace</h1>
+        <h1>NOB Library</h1>
         <p>Pick an indexed book, then chat with its contents.</p>
       </div>
 
@@ -20,27 +20,6 @@
         <div id="book-list" class="book-list" aria-live="polite"></div>
       </div>
 
-      <div class="sidebar-section">
-        <label for="provider-select">Provider</label>
-        <select id="provider-select">
-          <option value="anthropic">Anthropic</option>
-          <option value="openai">OpenAI</option>
-        </select>
-      </div>
-
-      <div class="sidebar-section">
-        <label for="profile-select">Speed</label>
-        <select id="profile-select">
-          <option value="fast">Fast</option>
-          <option value="default">Default</option>
-          <option value="deep">Deep</option>
-        </select>
-      </div>
-
-      <div class="sidebar-section checkbox-row">
-        <label for="retrieve-only">Retrieve only</label>
-        <input id="retrieve-only" type="checkbox">
-      </div>
     </aside>
 
     <main class="chat-panel">
@@ -74,6 +53,32 @@
         </div>
       </form>
     </main>
+
+    <aside class="settings-panel">
+      <div class="eyebrow">Settings</div>
+
+      <div class="sidebar-section">
+        <label for="provider-select">Provider</label>
+        <select id="provider-select">
+          <option value="anthropic">Anthropic</option>
+          <option value="openai">OpenAI</option>
+        </select>
+      </div>
+
+      <div class="sidebar-section">
+        <label for="profile-select">Speed</label>
+        <select id="profile-select">
+          <option value="fast">Fast</option>
+          <option value="default">Default</option>
+          <option value="deep">Deep</option>
+        </select>
+      </div>
+
+      <div class="sidebar-section checkbox-row">
+        <label for="retrieve-only">Retrieve only</label>
+        <input id="retrieve-only" type="checkbox">
+      </div>
+    </aside>
   </div>
 
   <template id="message-template">

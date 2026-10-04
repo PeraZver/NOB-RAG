@@ -102,6 +102,13 @@ def create_app() -> FastAPI:
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+    @app.middleware("http")
+    async def no_cache_ui(request, call_next):
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(_request, exc: Exception) -> JSONResponse:
         return JSONResponse(

@@ -33,15 +33,40 @@ body {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 320px 1fr;
-  min-height: 100vh;
+  grid-template-columns: minmax(340px, 30vw) minmax(0, 1fr) 230px;
+  height: 100vh;
 }
 
 .sidebar {
+  position: relative;
+  isolation: isolate;
+  overflow-y: auto;
+  min-height: 0;
   padding: 28px 22px;
   background: linear-gradient(180deg, rgba(18, 28, 39, 0.96), rgba(33, 47, 61, 0.92));
   color: #f5f0e7;
   border-right: 1px solid var(--panel-border);
+}
+
+.sidebar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: -1;
+  aspect-ratio: 1794 / 1008;
+  background: url("/static/img/1st_croatian_batallion.jpg") top center / 100% 100% no-repeat;
+  opacity: 0.5;
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  pointer-events: none;
+}
+
+.sidebar-header h1,
+.sidebar-header p,
+.sidebar-header .eyebrow {
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
 }
 
 .sidebar-header h1,
@@ -70,7 +95,22 @@ body {
   margin-top: 24px;
 }
 
-.sidebar label {
+.settings-panel {
+  align-self: start;
+  margin: 20px 28px 0 0;
+  padding: 20px;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(18, 28, 39, 0.96), rgba(33, 47, 61, 0.92));
+  color: #f5f0e7;
+  box-shadow: var(--shadow);
+}
+
+.settings-panel .eyebrow {
+  color: rgba(245, 240, 231, 0.72);
+}
+
+.sidebar label,
+.settings-panel label {
   display: block;
   margin-bottom: 10px;
   font-size: 13px;
@@ -78,18 +118,28 @@ body {
 }
 
 .sidebar select,
+.settings-panel select,
 .composer textarea,
 #send-button {
   font: inherit;
 }
 
-.sidebar select {
+.sidebar select,
+.settings-panel select {
   width: 100%;
   padding: 12px 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
   color: #f5f0e7;
   background: rgba(255, 255, 255, 0.06);
+}
+
+.settings-panel .checkbox-row label {
+  margin-bottom: 0;
+}
+
+.settings-panel option {
+  color: #1a2128;
 }
 
 .checkbox-row {
@@ -136,9 +186,10 @@ body {
 
 .chat-panel {
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  min-height: 100vh;
-  padding: 28px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100vh;
+  min-height: 0;
+  padding: 20px 28px;
   gap: 18px;
 }
 
@@ -280,7 +331,7 @@ body {
 
 .composer textarea {
   width: 100%;
-  resize: vertical;
+  resize: none;
   border: 0;
   outline: none;
   background: transparent;
@@ -330,9 +381,16 @@ body {
 @media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .settings-panel {
+    margin: 0 18px;
+    order: -1;
   }
 
   .sidebar {
+    max-height: 40vh;
     border-right: 0;
     border-bottom: 1px solid var(--panel-border);
   }
