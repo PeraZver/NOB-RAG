@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>NOB RAG Library</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -28,8 +29,16 @@
           <div class="eyebrow">Browser Interface</div>
           <h2 id="active-book-title">Choose a book</h2>
         </div>
-        <div id="status-pill" class="status-pill">Idle</div>
+        <div class="header-actions">
+          <button id="map-toggle" type="button" class="map-toggle">Map</button>
+          <div id="status-pill" class="status-pill">Idle</div>
+        </div>
       </header>
+
+      <section id="map-view" class="map-view" hidden>
+        <div id="map" class="map"></div>
+        <div id="map-message" class="map-message" hidden></div>
+      </section>
 
       <section id="chat-log" class="chat-log">
         <article class="message assistant intro-card">
@@ -56,6 +65,13 @@
 
     <aside class="settings-panel">
       <div class="eyebrow">Settings</div>
+
+      <div id="map-settings" class="sidebar-section map-settings" hidden>
+        <label>Campaign data</label>
+        <label class="radio-row"><input type="radio" name="campaign-variant" value="default" checked> Default</label>
+        <label class="radio-row"><input type="radio" name="campaign-variant" value="grouped"> Grouped</label>
+        <label class="radio-row"><input type="radio" name="campaign-variant" value="verified"> Verified</label>
+      </div>
 
       <div class="sidebar-section">
         <label for="provider-select">Provider</label>
@@ -88,6 +104,7 @@
     </article>
   </template>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

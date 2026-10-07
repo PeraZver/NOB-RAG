@@ -3,6 +3,7 @@ const state = {
   activeBookSlug: null,
   sharedIndexAvailable: false,
   pending: false,
+  mapOpen: false,
 };
 
 const bookList = document.getElementById("book-list");
@@ -63,7 +64,140 @@ function selectBook(bookSlug) {
     ? "Ready to query the shared library"
     : (book ? `Ready to query ${bookLabel(book)}` : "No book selected");
   renderBooks();
+  if (state.mapOpen) {
+    loadCampaign();
+  }
 }
+
+const mapToggle = document.getElementById("map-toggle");
+const mapView = document.getElementById("map-view");
+const mapMessage = document.getElementById("map-message");
+const mapSettings = document.getElementById("map-settings");
+let leafletMap = null;
+let campaignLayer = null;
+let campaignRequestId = 0;
+
+function setMapOpen(open) {
+  state.mapOpen = open;
+  document.body.classList.toggle("map-mode", open);
+  mapView.hidden = !open;
+  mapSettings.hidden = !open;
+  mapToggle.textContent = open ? "Chat" : "Map";
+  if (!open) {
+    return;
+  }
+  if (!leafletMap) {
+    leafletMap = L.map("map").setView([44.5, 16.5], 6);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(leafletMap);
+    campaignLayer = L.layerGroup().addTo(leafletMap);
+  }
+  leafletMap.invalidateSize();
+  loadCampaign();
+}
+
+function showMapMessage(text) {
+  mapMessage.textContent = text;
+  mapMessage.hidden = !text;
+}
+
+// Catmull-Rom spline through the points, sampled into a dense polyline.
+function splinePath(points, steps = 12) {
+  if (points.length < 3) {
+    return points;
+  }
+  const path = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(i - 1, 0)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(i + 2, points.length - 1)];
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      path.push(p1.map((_, k) =>
+        0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t +
+          (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 +
+          (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3)));
+    }
+  }
+  path.push(points[points.length - 1]);
+  return path;
+}
+
+async function loadCampaign() {
+  const requestId = ++campaignRequestId;
+  campaignLayer.clearLayers();
+  showMapMessage("");
+  const book = getActiveBook();
+  if (!book) {
+    showMapMessage(state.activeBookSlug === "__all__"
+      ? "Campaign maps are available for a single book. Select a book title."
+      : "Select a book to see its campaign.");
+    return;
+  }
+  const variant = document.querySelector('input[name="campaign-variant"]:checked').value;
+  let data;
+  try {
+    const response = await fetch(`/api/campaign/${encodeURIComponent(book.slug)}?variant=${variant}`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.detail || `Request failed (${response.status})`);
+    }
+    data = payload;
+  } catch (error) {
+    if (requestId === campaignRequestId) {
+      showMapMessage(`No campaign to display: ${error.message}`);
+    }
+    return;
+  }
+  if (requestId !== campaignRequestId) {
+    return;
+  }
+
+  const latLngs = data.points.map((point) => [point.lat, point.lng]);
+  const unique = latLngs.filter((p, i) => i === 0 || p[0] !== latLngs[i - 1][0] || p[1] !== latLngs[i - 1][1]);
+  if (unique.length > 1) {
+    L.polyline(splinePath(unique), { color: "#b3412c", weight: 3, opacity: 0.8 }).addTo(campaignLayer);
+  }
+  const markers = [];
+  const goToPoint = (index) => {
+    leafletMap.panTo(markers[index].getLatLng());
+    markers[index].openPopup();
+  };
+  data.points.forEach((point, index) => {
+    const isFirst = index === 0;
+    const marker = L.circleMarker([point.lat, point.lng], {
+      radius: isFirst ? 10 : 7,
+      color: isFirst ? "#0b3d91" : "#7a2a1c",
+      weight: 2,
+      fillColor: isFirst ? "#2f7be5" : "#e0674d",
+      fillOpacity: 0.95,
+    });
+    const content = document.createElement("div");
+    content.innerHTML =
+      `<strong>${index + 1}. ${escapeHtml(point.operation || "(no operation)")}</strong><br>` +
+      `Date: ${escapeHtml(point.date || "unknown")}<br>Place: ${escapeHtml(point.place || "unknown")}` +
+      `<div class="popup-nav"><button type="button" class="popup-prev" aria-label="Previous point">&larr;</button>` +
+      `<span>${index + 1} / ${data.points.length}</span>` +
+      `<button type="button" class="popup-next" aria-label="Next point">&rarr;</button></div>`;
+    const prev = content.querySelector(".popup-prev");
+    const next = content.querySelector(".popup-next");
+    prev.disabled = index === 0;
+    next.disabled = index === data.points.length - 1;
+    prev.addEventListener("click", () => goToPoint(index - 1));
+    next.addEventListener("click", () => goToPoint(index + 1));
+    marker.bindPopup(content).addTo(campaignLayer);
+    markers.push(marker);
+  });  leafletMap.fitBounds(L.latLngBounds(latLngs).pad(0.2), { maxZoom: 11 });
+}
+
+mapToggle.addEventListener("click", () => setMapOpen(!state.mapOpen));
+document.querySelectorAll('input[name="campaign-variant"]').forEach((input) =>
+  input.addEventListener("change", loadCampaign));
 
 function bookLabel(book) {
   return book.display_title || book.title;

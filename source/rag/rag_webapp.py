@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -28,6 +29,12 @@ from rag.rag_utils import (
 PACKAGE_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PACKAGE_DIR.parent
 STATIC_DIR = PACKAGE_DIR / "webapp_static"
+
+CAMPAIGN_FILES = {
+    "default": "brigade_campaign.json",
+    "grouped": "brigade_campaign_grouped.json",
+    "verified": "brigade_campaign_verified.json",
+}
 
 
 class ChatRequest(BaseModel):
@@ -158,6 +165,39 @@ def create_app() -> FastAPI:
             "shared_index_available": shared_index_available(),
             "books_root": str(resolve_books_root(SOURCE_DIR)),
         }
+
+    @app.get("/api/campaign/{book_slug}")
+    async def campaign(book_slug: str, variant: str = "default") -> dict[str, object]:
+        if variant not in CAMPAIGN_FILES:
+            raise HTTPException(status_code=400, detail="variant must be default, grouped, or verified")
+        book = get_book_by_slug(book_slug)
+        path = book.path / CAMPAIGN_FILES[variant]
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail=f"No {variant} campaign file for this book.")
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=500, detail=f"Could not read campaign file: {exc}") from exc
+
+        points = []
+        for movement in data.get("movements") or []:
+            coords = movement.get("coordinates") or {}
+            lat, lng = coords.get("lat"), coords.get("lng")
+            if not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
+                continue
+            points.append(
+                {
+                    "date": movement.get("date") or "",
+                    "place": movement.get("place") or "",
+                    "operation": movement.get("operation") or "",
+                    "lat": lat,
+                    "lng": lng,
+                }
+            )
+        points.sort(key=lambda point: point["date"] or "9999")
+        if not points:
+            raise HTTPException(status_code=404, detail=f"The {variant} campaign file has no points with coordinates.")
+        return {"variant": variant, "brigade_name": data.get("brigade_name") or "", "points": points}
 
     @app.post("/api/chat")
     async def chat(request: ChatRequest) -> dict[str, object]:
