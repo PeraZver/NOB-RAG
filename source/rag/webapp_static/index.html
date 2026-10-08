@@ -17,7 +17,16 @@
       </div>
 
       <div class="sidebar-section">
-        <label for="book-list">Books</label>
+        <div class="book-header">
+          <label for="book-search">Books</label>
+          <div class="book-search-wrap">
+            <svg class="search-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/>
+              <path d="M15 15l6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+            </svg>
+            <input id="book-search" class="book-search" type="search" placeholder="Search books" autocomplete="off">
+          </div>
+        </div>
         <div id="book-list" class="book-list" aria-live="polite"></div>
       </div>
 

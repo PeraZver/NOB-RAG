@@ -603,3 +603,45 @@ body {
   gap: 6px;
   margin-bottom: 8px;
 }
+
+.book-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.book-header label {
+  margin: 0;
+}
+
+.book-search-wrap {
+  position: relative;
+  flex: 0 0 50%;
+  color: rgba(245, 240, 231, 0.7);
+}
+
+.search-icon {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.book-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 12px 6px 30px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #f5f0e7;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.book-search::placeholder {
+  color: rgba(245, 240, 231, 0.6);
+}

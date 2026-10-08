@@ -27,6 +27,13 @@ function getActiveBook() {
   return state.books.find((book) => book.slug === state.activeBookSlug) || null;
 }
 
+const bookSearch = document.getElementById("book-search");
+bookSearch.addEventListener("input", () => renderBooks());
+
+function normalizeSearch(value) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
 function renderBooks() {
   bookList.innerHTML = "";
   if (state.sharedIndexAvailable) {
@@ -41,7 +48,19 @@ function renderBooks() {
     bookList.appendChild(button);
   }
 
-  for (const book of state.books) {
+  const query = normalizeSearch(bookSearch.value);
+  const visibleBooks = query
+    ? state.books.filter((book) =>
+        normalizeSearch(`${book.author || ""} ${book.display_title || ""} ${book.title}`).includes(query))
+    : state.books;
+  if (query && visibleBooks.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "book-meta";
+    empty.textContent = "No matching books";
+    bookList.appendChild(empty);
+  }
+
+  for (const book of visibleBooks) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `book-button${book.slug === state.activeBookSlug ? " active" : ""}`;
