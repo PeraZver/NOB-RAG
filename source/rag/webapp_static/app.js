@@ -128,7 +128,7 @@ function splinePath(points, steps = 12) {
   return path;
 }
 
-async function loadCampaign() {
+async function loadCampaign(focusFileIndex = null) {
   const requestId = ++campaignRequestId;
   campaignLayer.clearLayers();
   showMapMessage("");
@@ -164,6 +164,7 @@ async function loadCampaign() {
     L.polyline(splinePath(unique), { color: "#b3412c", weight: 3, opacity: 0.8 }).addTo(campaignLayer);
   }
   const markers = [];
+  let focusMarker = null;
   const goToPoint = (index) => {
     leafletMap.panTo(markers[index].getLatLng());
     markers[index].openPopup();
@@ -190,14 +191,110 @@ async function loadCampaign() {
     next.disabled = index === data.points.length - 1;
     prev.addEventListener("click", () => goToPoint(index - 1));
     next.addEventListener("click", () => goToPoint(index + 1));
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "popup-edit";
+    editButton.textContent = "Edit";
+    editButton.addEventListener("click", () =>
+      openEditDialog(book.slug, data.variant, point, () => loadCampaign(point.index)));
+    content.prepend(editButton);
     marker.bindPopup(content).addTo(campaignLayer);
     markers.push(marker);
-  });  leafletMap.fitBounds(L.latLngBounds(latLngs).pad(0.2), { maxZoom: 11 });
+    if (point.index === focusFileIndex) {
+      focusMarker = marker;
+    }
+  });
+  leafletMap.fitBounds(L.latLngBounds(latLngs).pad(0.2), { maxZoom: 11 });
+  if (focusMarker) {
+    leafletMap.panTo(focusMarker.getLatLng());
+    focusMarker.openPopup();
+  }
+}
+
+function openEditDialog(bookSlug, variant, point, onSaved) {
+  const entry = structuredClone(point.entry);
+  const overlay = document.createElement("div");
+  overlay.className = "edit-overlay";
+  const form = document.createElement("form");
+  form.className = "edit-dialog";
+  form.innerHTML = "<h3>Edit campaign entry</h3>";
+
+  const inputs = [];
+  const addField = (label, value, setter, kind) => {
+    const wrapper = document.createElement("label");
+    wrapper.className = "edit-field";
+    wrapper.append(document.createTextNode(label));
+    const long = kind === "text" && (String(value).length > 80 || label === "notes");
+    const input = document.createElement(long ? "textarea" : "input");
+    if (long) {
+      input.rows = 5;
+    } else if (kind === "number") {
+      input.type = "number";
+      input.step = "any";
+      input.required = true;
+    } else {
+      input.type = "text";
+    }
+    input.value = value ?? "";
+    wrapper.appendChild(input);
+    form.appendChild(wrapper);
+    inputs.push(() => setter(kind === "number" ? Number(input.value) : input.value));
+  };
+
+  for (const [key, value] of Object.entries(entry)) {
+    if (key === "coordinates") {
+      const coords = value && typeof value === "object" ? value : {};
+      entry.coordinates = coords;
+      addField("latitude", coords.lat, (v) => { coords.lat = v; }, "number");
+      addField("longitude", coords.lng, (v) => { coords.lng = v; }, "number");
+    } else if (value === null || typeof value === "string") {
+      addField(key, value, (v) => { entry[key] = v; }, "text");
+    } else if (typeof value === "number") {
+      addField(key, value, (v) => { entry[key] = v; }, "number");
+    }
+  }
+
+  const error = document.createElement("div");
+  error.className = "edit-error";
+  const actions = document.createElement("div");
+  actions.className = "edit-actions";
+  actions.innerHTML =
+    '<button type="button" class="edit-cancel">Cancel</button><button type="submit" class="edit-save">Save</button>';
+  form.append(error, actions);
+  overlay.appendChild(form);
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  actions.querySelector(".edit-cancel").addEventListener("click", close);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    inputs.forEach((apply) => apply());
+    const saveButton = actions.querySelector(".edit-save");
+    saveButton.disabled = true;
+    try {
+      const response = await fetch(
+        `/api/campaign/${encodeURIComponent(bookSlug)}?variant=${variant}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ index: point.index, entry }),
+        });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof payload.detail === "string" ? payload.detail : `Request failed (${response.status})`);
+      }
+      close();
+      onSaved();
+    } catch (err) {
+      error.textContent = `Save failed: ${err.message}`;
+      saveButton.disabled = false;
+    }
+  });
 }
 
 mapToggle.addEventListener("click", () => setMapOpen(!state.mapOpen));
 document.querySelectorAll('input[name="campaign-variant"]').forEach((input) =>
-  input.addEventListener("change", loadCampaign));
+  input.addEventListener("change", () => loadCampaign()));
 
 function bookLabel(book) {
   return book.display_title || book.title;

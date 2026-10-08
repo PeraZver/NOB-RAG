@@ -46,6 +46,11 @@ class ChatRequest(BaseModel):
     model: str | None = None
 
 
+class CampaignEntryUpdate(BaseModel):
+    index: int
+    entry: dict
+
+
 def display_parts(book: IndexedBook) -> dict[str, str]:
     # Prefer curated metadata; fall back to splitting "Author - Title".
     author = str(book.metadata.get("author") or "").strip()
@@ -180,13 +185,15 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=500, detail=f"Could not read campaign file: {exc}") from exc
 
         points = []
-        for movement in data.get("movements") or []:
+        for file_index, movement in enumerate(data.get("movements") or []):
             coords = movement.get("coordinates") or {}
             lat, lng = coords.get("lat"), coords.get("lng")
             if not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
                 continue
             points.append(
                 {
+                    "index": file_index,
+                    "entry": movement,
                     "date": movement.get("date") or "",
                     "place": movement.get("place") or "",
                     "operation": movement.get("operation") or "",
@@ -198,6 +205,42 @@ def create_app() -> FastAPI:
         if not points:
             raise HTTPException(status_code=404, detail=f"The {variant} campaign file has no points with coordinates.")
         return {"variant": variant, "brigade_name": data.get("brigade_name") or "", "points": points}
+
+    @app.put("/api/campaign/{book_slug}")
+    async def update_campaign_entry(
+        book_slug: str, request: CampaignEntryUpdate, variant: str = "default"
+    ) -> dict[str, object]:
+        if variant not in CAMPAIGN_FILES:
+            raise HTTPException(status_code=400, detail="variant must be default, grouped, or verified")
+        book = get_book_by_slug(book_slug)
+        path = book.path / CAMPAIGN_FILES[variant]
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail=f"No {variant} campaign file for this book.")
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=500, detail=f"Could not read campaign file: {exc}") from exc
+
+        movements = data.get("movements")
+        if not isinstance(movements, list) or not 0 <= request.index < len(movements):
+            raise HTTPException(status_code=404, detail="Entry index out of range.")
+        coords = request.entry.get("coordinates")
+        if not isinstance(coords, dict) or not all(
+            isinstance(coords.get(key), (int, float)) and not isinstance(coords.get(key), bool)
+            for key in ("lat", "lng")
+        ):
+            raise HTTPException(status_code=400, detail="coordinates must contain numeric lat and lng.")
+        if not -90 <= coords["lat"] <= 90 or not -180 <= coords["lng"] <= 180:
+            raise HTTPException(status_code=400, detail="coordinates are out of range.")
+
+        movements[request.index] = request.entry
+        tmp_path = path.with_name(path.name + ".tmp")
+        try:
+            tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            tmp_path.replace(path)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Could not write campaign file: {exc}") from exc
+        return {"saved": True, "index": request.index}
 
     @app.post("/api/chat")
     async def chat(request: ChatRequest) -> dict[str, object]:
