@@ -242,6 +242,31 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=500, detail=f"Could not write campaign file: {exc}") from exc
         return {"saved": True, "index": request.index}
 
+    @app.delete("/api/campaign/{book_slug}/{index}")
+    async def delete_campaign_entry(book_slug: str, index: int, variant: str = "default") -> dict[str, object]:
+        if variant not in CAMPAIGN_FILES:
+            raise HTTPException(status_code=400, detail="variant must be default, grouped, or verified")
+        book = get_book_by_slug(book_slug)
+        path = book.path / CAMPAIGN_FILES[variant]
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail=f"No {variant} campaign file for this book.")
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=500, detail=f"Could not read campaign file: {exc}") from exc
+
+        movements = data.get("movements")
+        if not isinstance(movements, list) or not 0 <= index < len(movements):
+            raise HTTPException(status_code=404, detail="Entry index out of range.")
+        del movements[index]
+        tmp_path = path.with_name(path.name + ".tmp")
+        try:
+            tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            tmp_path.replace(path)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Could not write campaign file: {exc}") from exc
+        return {"deleted": True, "index": index}
+
     @app.post("/api/chat")
     async def chat(request: ChatRequest) -> dict[str, object]:
         using_shared = shared_index_available()

@@ -197,7 +197,31 @@ async function loadCampaign(focusFileIndex = null) {
     editButton.textContent = "Edit";
     editButton.addEventListener("click", () =>
       openEditDialog(book.slug, data.variant, point, () => loadCampaign(point.index)));
-    content.prepend(editButton);
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "popup-delete";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", async () => {
+      if (!window.confirm(`Delete entry "${point.operation || point.place || point.date}" permanently?`)) {
+        return;
+      }
+      try {
+        const response = await fetch(
+          `/api/campaign/${encodeURIComponent(book.slug)}/${point.index}?variant=${data.variant}`,
+          { method: "DELETE" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(typeof payload.detail === "string" ? payload.detail : `Request failed (${response.status})`);
+        }
+        loadCampaign();
+      } catch (err) {
+        window.alert(`Delete failed: ${err.message}`);
+      }
+    });
+    const toolbar = document.createElement("div");
+    toolbar.className = "popup-toolbar";
+    toolbar.append(editButton, deleteButton);
+    content.prepend(toolbar);
     marker.bindPopup(content).addTo(campaignLayer);
     markers.push(marker);
     if (point.index === focusFileIndex) {
@@ -239,14 +263,27 @@ function openEditDialog(bookSlug, variant, point, onSaved) {
     wrapper.appendChild(input);
     form.appendChild(wrapper);
     inputs.push(() => setter(kind === "number" ? Number(input.value) : input.value));
+    return input;
   };
 
   for (const [key, value] of Object.entries(entry)) {
     if (key === "coordinates") {
       const coords = value && typeof value === "object" ? value : {};
       entry.coordinates = coords;
-      addField("latitude", coords.lat, (v) => { coords.lat = v; }, "number");
-      addField("longitude", coords.lng, (v) => { coords.lng = v; }, "number");
+      const latInput = addField("latitude", coords.lat, (v) => { coords.lat = v; }, "number");
+      const lngInput = addField("longitude", coords.lng, (v) => { coords.lng = v; }, "number");
+      // Google Maps format: "45.877, 19.964" pasted into either field fills both.
+      const onPaste = (event) => {
+        const match = (event.clipboardData.getData("text") || "")
+          .match(/^\s*(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*$/);
+        if (match) {
+          event.preventDefault();
+          latInput.value = match[1];
+          lngInput.value = match[2];
+        }
+      };
+      latInput.addEventListener("paste", onPaste);
+      lngInput.addEventListener("paste", onPaste);
     } else if (value === null || typeof value === "string") {
       addField(key, value, (v) => { entry[key] = v; }, "text");
     } else if (typeof value === "number") {
