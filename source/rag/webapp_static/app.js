@@ -8,6 +8,7 @@ const state = {
 
 const bookList = document.getElementById("book-list");
 const activeBookTitle = document.getElementById("active-book-title");
+const activeBookAuthor = document.getElementById("active-book-author");
 const chatLog = document.getElementById("chat-log");
 const chatForm = document.getElementById("chat-form");
 const questionInput = document.getElementById("question-input");
@@ -79,6 +80,7 @@ function selectBook(bookSlug) {
   const book = getActiveBook();
   const isAllBooks = bookSlug === "__all__";
   activeBookTitle.textContent = isAllBooks ? "All indexed books" : (book ? bookLabel(book) : "Choose a book");
+  activeBookAuthor.textContent = isAllBooks ? "" : (book ? authorLabel(book) : "Pero");
   composerMeta.textContent = isAllBooks
     ? "Ready to query the shared library"
     : (book ? `Ready to query ${bookLabel(book)}` : "No book selected");
@@ -354,6 +356,10 @@ document.querySelectorAll('input[name="campaign-variant"]').forEach((input) =>
 
 function bookLabel(book) {
   return book.display_title || book.title;
+}
+
+function authorLabel(book) {
+  return book.author;
 }
 
 // Order by the first unit number in the title; unnumbered books go last, then alphabetical.
